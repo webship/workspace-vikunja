@@ -191,6 +191,16 @@ foreach ($verbs as $verb) {
             $member = login('member', $pw['member']);
             api('PUT', "/projects/{$pid}/tasks", ['title' => $usage, 'description' => '<p>The usage line of <code>greeting.sh</code> says <em>greting</em>.</p>'], $member);
         }
+        $newline = 'The greeting script ends without a newline';
+        if (! $find($newline)) {
+            [, $task] = api('PUT', "/projects/{$pid}/tasks", ['title' => $newline, 'description' => '<p><code>greeting.sh</code> prints its last line without a newline.</p>'], $owner);
+            // Done, as a task of the project that is finished: Vikunja moves it to the board's Done bucket. An update
+            // takes the whole task, so the task goes back as Vikunja gave it, marked done.
+            if (! empty($task['id'])) {
+                $task['done'] = true;
+                api('POST', '/tasks/' . (int) $task['id'], $task, $owner);
+            }
+        }
         say('content: ' . SAMPLE_PROJECT . ' (' . SAMPLE_KEY . ') holds ' . one('SELECT COUNT(*) FROM tasks WHERE project_id = ?', [$pid]) . ' tasks');
     } elseif ($verb === 'tidy') {
         $project = sample_project();

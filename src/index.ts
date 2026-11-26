@@ -49,7 +49,7 @@ export function assistantContext(): string {
     'The builder asks for 1 GB of free memory before it starts.',
     '`--install` makes the workspace account the instance\'s first account with Vikunja\'s own command (its password through a pseudo-terminal, never on a command line); sign-ups stay closed.',
     '`--add-users` adds the default accounts the same way (owner, member, reader, stranger), each @example.com;',
-    '`--sample-content` shares the project Webship site (key WEB) of owner with member (read & write) and reader (read only), not with stranger, and adds the tasks WEB-1 and WEB-2, a label, an assignee, a comment and its board.',
+    '`--sample-content` shares the project Webship site (key WEB) of owner with member (read & write) and reader (read only), not with stranger, and adds the tasks WEB-1, WEB-2 and WEB-3 (done), a label, an assignee, a comment and its board.',
     '`bash cmd-tools-vikunja-cli.sh <name>` says what the site is and lists its accounts; `--run "<command>"` runs one of Vikunja\'s own commands in its container,',
     '`--sample-content` adds the sample content later, `--tidy` removes the tasks a stopped test run left ("Webship test …"), `--add-users` and `--cancel-users` manage the default accounts,',
     'and `--connect <login>` points the dashboard\'s Vikunja at the site as that default account (a new API token in the plugin\'s settings, never shown, its earlier one revoked).',

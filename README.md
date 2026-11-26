@@ -107,8 +107,9 @@ menu) add them and keep them from logging in.
 
 Webship site (key `WEB`), owned by owner and shared with member (read & write) and reader (read only): "The greeting
 script says Helo instead of Hello" (WEB-1, by owner, high, labelled bug, assigned to member, in the board's Doing, with
-owner's comment) and "The usage line spells greeting as greting" (WEB-2, by member, in To-Do). The builder makes them
-through Vikunja's API, as their authors.
+owner's comment), "The usage line spells greeting as greting" (WEB-2, by member, in To-Do) and "The greeting script
+ends without a newline" (WEB-3, by owner, done, in Done). The builder makes them through Vikunja's API, as their
+authors.
 
 ## The tool
 

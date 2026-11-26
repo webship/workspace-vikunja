@@ -34,8 +34,10 @@ the pack or in webship-js; a scenario names no platform.
 
 `--sample-content` shares Webship site (`WEB`), owned by owner, with member (read & write) and reader (read only),
 and adds "The greeting script says Helo instead of Hello" (WEB-1, by owner, high, labelled bug, assigned to member, in
-the bucket Doing, with owner's comment "Seen on the test site: the greeting prints Helo.") and "The usage line spells
-greeting as greting" (WEB-2, by member, in To-Do). A suite reads them and never changes them.
+the bucket Doing, with owner's comment "Seen on the test site: the greeting prints Helo."), "The usage line spells
+greeting as greting" (WEB-2, by member, in To-Do) and "The greeting script ends without a newline" (WEB-3, by owner,
+done: the list does not show it, the table marks it Done, the board holds it in Done). A suite reads them and never
+changes them.
 
 ## Traps found on real sites
 
