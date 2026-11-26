@@ -1,0 +1,176 @@
+[
+ {
+  "id": 3,
+  "title": "Inbox",
+  "description": "",
+  "identifier": "",
+  "hex_color": "",
+  "parent_project_id": 0,
+  "owner": {
+   "id": 3,
+   "name": "Member Test",
+   "username": "member",
+   "created": "2026-11-26T03:43:46Z",
+   "updated": "2026-11-26T03:43:46Z"
+  },
+  "is_archived": false,
+  "background_information": null,
+  "background_blur_hash": "",
+  "is_favorite": false,
+  "position": 196608,
+  "views": [
+   {
+    "id": 9,
+    "title": "List",
+    "project_id": 3,
+    "view_kind": "list",
+    "filter": {
+     "s": "",
+     "sort_by": null,
+     "order_by": null,
+     "filter": "done = false",
+     "filter_include_nulls": false
+    },
+    "position": 100,
+    "bucket_configuration_mode": "none",
+    "bucket_configuration": null,
+    "default_bucket_id": 0,
+    "done_bucket_id": 0,
+    "updated": "2026-11-26T03:43:46Z",
+    "created": "2026-11-26T03:43:46Z"
+   },
+   {
+    "id": 10,
+    "title": "Gantt",
+    "project_id": 3,
+    "view_kind": "gantt",
+    "filter": null,
+    "position": 200,
+    "bucket_configuration_mode": "none",
+    "bucket_configuration": null,
+    "default_bucket_id": 0,
+    "done_bucket_id": 0,
+    "updated": "2026-11-26T03:43:46Z",
+    "created": "2026-11-26T03:43:46Z"
+   },
+   {
+    "id": 11,
+    "title": "Table",
+    "project_id": 3,
+    "view_kind": "table",
+    "filter": null,
+    "position": 300,
+    "bucket_configuration_mode": "none",
+    "bucket_configuration": null,
+    "default_bucket_id": 0,
+    "done_bucket_id": 0,
+    "updated": "2026-11-26T03:43:46Z",
+    "created": "2026-11-26T03:43:46Z"
+   },
+   {
+    "id": 12,
+    "title": "Kanban",
+    "project_id": 3,
+    "view_kind": "kanban",
+    "filter": null,
+    "position": 400,
+    "bucket_configuration_mode": "manual",
+    "bucket_configuration": null,
+    "default_bucket_id": 7,
+    "done_bucket_id": 9,
+    "updated": "2026-11-26T03:43:46Z",
+    "created": "2026-11-26T03:43:46Z"
+   }
+  ],
+  "max_permission": null,
+  "created": "2026-11-26T03:43:46Z",
+  "updated": "2026-11-26T03:43:46Z"
+ },
+ {
+  "id": 6,
+  "title": "Webship site",
+  "description": "<p>The sample project of the Webship Workspace.</p>",
+  "identifier": "WEB",
+  "hex_color": "",
+  "parent_project_id": 0,
+  "owner": {
+   "id": 2,
+   "name": "Owner Test",
+   "username": "owner",
+   "created": "2026-11-26T03:43:46Z",
+   "updated": "2026-11-26T03:43:46Z"
+  },
+  "is_archived": false,
+  "background_information": null,
+  "background_blur_hash": "",
+  "is_favorite": false,
+  "position": 393216,
+  "views": [
+   {
+    "id": 21,
+    "title": "List",
+    "project_id": 6,
+    "view_kind": "list",
+    "filter": {
+     "s": "",
+     "sort_by": null,
+     "order_by": null,
+     "filter": "done = false",
+     "filter_include_nulls": false
+    },
+    "position": 100,
+    "bucket_configuration_mode": "none",
+    "bucket_configuration": null,
+    "default_bucket_id": 0,
+    "done_bucket_id": 0,
+    "updated": "2026-11-26T03:43:48Z",
+    "created": "2026-11-26T03:43:48Z"
+   },
+   {
+    "id": 22,
+    "title": "Gantt",
+    "project_id": 6,
+    "view_kind": "gantt",
+    "filter": null,
+    "position": 200,
+    "bucket_configuration_mode": "none",
+    "bucket_configuration": null,
+    "default_bucket_id": 0,
+    "done_bucket_id": 0,
+    "updated": "2026-11-26T03:43:48Z",
+    "created": "2026-11-26T03:43:48Z"
+   },
+   {
+    "id": 23,
+    "title": "Table",
+    "project_id": 6,
+    "view_kind": "table",
+    "filter": null,
+    "position": 300,
+    "bucket_configuration_mode": "none",
+    "bucket_configuration": null,
+    "default_bucket_id": 0,
+    "done_bucket_id": 0,
+    "updated": "2026-11-26T03:43:48Z",
+    "created": "2026-11-26T03:43:48Z"
+   },
+   {
+    "id": 24,
+    "title": "Kanban",
+    "project_id": 6,
+    "view_kind": "kanban",
+    "filter": null,
+    "position": 400,
+    "bucket_configuration_mode": "manual",
+    "bucket_configuration": null,
+    "default_bucket_id": 16,
+    "done_bucket_id": 18,
+    "updated": "2026-11-26T03:43:48Z",
+    "created": "2026-11-26T03:43:48Z"
+   }
+  ],
+  "max_permission": null,
+  "created": "2026-11-26T03:43:48Z",
+  "updated": "2026-11-26T03:47:06Z"
+ }
+]

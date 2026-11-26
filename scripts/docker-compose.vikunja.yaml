@@ -1,0 +1,33 @@
+# Vikunja of this project: Vikunja's own image (its API and its web app in one binary, an image with no shell) on the
+# project's own MariaDB (the container tool's db service), served at the project's address; the project's web container
+# keeps the mail catcher. Written by the Vikunja builder of the workspace (the plugin's docker-compose.vikunja.yaml);
+# build again rather than editing by hand. The site's own values (its secret) are in vikunja/env, which only you can
+# read; its files (attachments, avatars, backgrounds) in vikunja/files, the host user's.
+services:
+  web:
+    environment:
+      - HTTP_EXPOSE=8093:80,8025:8025
+      - HTTPS_EXPOSE=8457:80,8026:8025
+  vikunja:
+    image: "${VIKUNJA_IMAGE:-docker.io/vikunja/vikunja:2.8.0}"
+    container_name: ddev-${DDEV_SITENAME}-vikunja
+    labels:
+      com.ddev.site-name: ${DDEV_SITENAME}
+      com.ddev.approot: ${DDEV_APPROOT}
+    restart: "no"
+    # The host user: the project's vikunja/files is theirs, and Vikunja writes there.
+    user: "${DDEV_UID}:${DDEV_GID}"
+    expose:
+      - "3456"
+    # Vikunja makes its tables in the project's database once it takes connections.
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - ${DDEV_APPROOT}/vikunja/env
+    volumes:
+      - ${DDEV_APPROOT}/vikunja/files:/app/vikunja/files
+    environment:
+      VIRTUAL_HOST: ${DDEV_HOSTNAME}
+      HTTP_EXPOSE: "80:3456"
+      HTTPS_EXPOSE: "443:3456"
