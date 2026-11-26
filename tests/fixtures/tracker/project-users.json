@@ -1,0 +1,18 @@
+[
+ {
+  "id": 3,
+  "name": "Member Test",
+  "username": "member",
+  "created": "2026-11-26T03:43:46Z",
+  "updated": "2026-11-26T03:43:46Z",
+  "permission": 1
+ },
+ {
+  "id": 4,
+  "name": "Reader Test",
+  "username": "reader",
+  "created": "2026-11-26T03:43:47Z",
+  "updated": "2026-11-26T03:43:47Z",
+  "permission": 0
+ }
+]

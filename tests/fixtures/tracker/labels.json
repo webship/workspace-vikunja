@@ -1,0 +1,17 @@
+[
+ {
+  "id": 1,
+  "title": "bug",
+  "description": "",
+  "hex_color": "e8445a",
+  "created_by": {
+   "id": 2,
+   "name": "Owner Test",
+   "username": "owner",
+   "created": "2026-11-26T03:43:46Z",
+   "updated": "2026-11-26T03:43:46Z"
+  },
+  "created": "2026-11-26T03:43:48Z",
+  "updated": "2026-11-26T03:43:48Z"
+ }
+]

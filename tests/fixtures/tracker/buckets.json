@@ -1,0 +1,53 @@
+[
+ {
+  "id": 16,
+  "title": "To-Do",
+  "project_view_id": 24,
+  "limit": 0,
+  "count": 0,
+  "position": 100,
+  "created": "2026-11-26T03:43:48Z",
+  "updated": "2026-11-26T03:43:48Z",
+  "created_by": {
+   "id": 2,
+   "name": "Owner Test",
+   "username": "owner",
+   "created": "2026-11-26T03:43:46Z",
+   "updated": "2026-11-26T03:43:46Z"
+  }
+ },
+ {
+  "id": 17,
+  "title": "Doing",
+  "project_view_id": 24,
+  "limit": 0,
+  "count": 0,
+  "position": 200,
+  "created": "2026-11-26T03:43:48Z",
+  "updated": "2026-11-26T03:43:48Z",
+  "created_by": {
+   "id": 2,
+   "name": "Owner Test",
+   "username": "owner",
+   "created": "2026-11-26T03:43:46Z",
+   "updated": "2026-11-26T03:43:46Z"
+  }
+ },
+ {
+  "id": 18,
+  "title": "Done",
+  "project_view_id": 24,
+  "limit": 0,
+  "count": 0,
+  "position": 300,
+  "created": "2026-11-26T03:43:48Z",
+  "updated": "2026-11-26T03:43:48Z",
+  "created_by": {
+   "id": 2,
+   "name": "Owner Test",
+   "username": "owner",
+   "created": "2026-11-26T03:43:46Z",
+   "updated": "2026-11-26T03:43:46Z"
+  }
+ }
+]
