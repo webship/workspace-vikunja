@@ -250,7 +250,7 @@ foreach ($verbs as $verb) {
         }
         // What the dashboard reads and, with writes on, writes, as this person.
         $permissions = [
-            'projects' => ['read_all', 'read_one'], 'projects_users' => ['read_all'], 'projects_teams' => ['read_all'],
+            'projects' => ['read_all', 'read_one', 'tasks_by_index', 'views_buckets', 'views_buckets_tasks', 'views_buckets_tasks_update'], 'projects_users' => ['read_all'], 'projects_teams' => ['read_all'],
             'projects_views' => ['read_all', 'read_one'], 'projects_views_tasks' => ['read_all'],
             'tasks' => ['read_all', 'read_one', 'create', 'update'], 'tasks_comments' => ['read_all', 'read_one', 'create'],
             'tasks_assignees' => ['read_all', 'create', 'delete'], 'tasks_labels' => ['read_all', 'create', 'delete'],

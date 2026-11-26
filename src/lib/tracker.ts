@@ -1,95 +1,83 @@
 /**
- * Vikunja, as a provider of the tracker family (@webship.co/workspace-tracker): the tasks of a Vikunja project, over
- * its JSON-RPC API (/api/jsonrpc) as a person, with that person's bearer token (the Authorization header), in a header
- * file, never on a command line. The builder's tool makes the token with Vikunja's own console (--connect <login>).
+ * Vikunja, as a provider of the tracker family (@webship.co/workspace-tracker): the tasks of a Vikunja project, over its
+ * REST API (/api/v1) as a person, with that person's API token (the Authorization header), in a header file, never on
+ * a command line. The builder's tool makes the token through Vikunja's API as the account (--connect <login>).
  *
- * A scope is a project, by its name ("Webship site"); an item is a task, by its number ("12"), which is the same on
- * the whole site: Vikunja shows it as "#12".
+ * A scope is a project, by its title ("Webship site"); an item is a task, by its project's key and its number there
+ * ("WEB-1"), as Vikunja shows it; "#1" and "1" are the same task of the scope's project.
  *
- * Reads: the open tasks (their status is not of the DONE type), mine, assigned to someone, the current sprint's (the
- * sprint whose dates hold today), and a search in the title; one task with its comments and its history. Milestones are
- * not tasks: the lists leave them out.
+ * Reads: the open tasks (not done), mine, assigned to someone, and a search in the title; one task with its comments.
+ * A task's state is its bucket on the project's board (its Kanban view): To-Do, Doing, Done by default. Vikunja has no
+ * sprint, and its time tracking is a feature of its paid licence, not of its open-source edition: no iteration view and
+ * no worklog here.
  *
- * Each author's standing is their role in the project (the project's own role, else the person's role): an Owner, an
- * Administrator and a Company Manager are owners of it, an Editor a member; a Commenter and a Read Only person, who may
- * change no task, and someone not in the project's team are outside, so the base keeps their tasks analyze-only unless
- * a person confirms by name. Each comment's author is read on their own. The last editor is the person of the newest
- * change of the title or the description in the task's history, else its creator.
+ * Each person's standing is what the project gives them: its owner and an admin share are owners of it, a read & write
+ * share a member; a read only share and someone it is not shared with are outside, so the base keeps their tasks
+ * analyze-only unless a person confirms by name. A team's share counts for its members. Each comment's author is read on
+ * their own. Vikunja keeps no history of a task: the last editor is its creator.
  *
- * Writes, which the base offers only with writes on, each after a person's click: a comment, a status, the task's tags
- * as labels, an assignee, logged time (the worklog), and a new task. The base writes Markdown; Vikunja keeps HTML, so
- * the provider turns it into the HTML Vikunja's editor reads, with every character of the text escaped. Vikunja is
- * not a forge: the pull request of the work is opened from the project's forge menu. A Vikunja API key is
- * `lt_<user>_<secret>`; the base refuses that shape, and the provider's own token, in whatever is about to be posted.
+ * Writes, which the base offers only with writes on, each after a person's click: a comment, a move to another bucket of
+ * the board (Done marks the task done), labels the person can use, an assignee who may change tasks, and a new task.
+ * The base writes Markdown; Vikunja keeps HTML, so the provider turns it into the HTML Vikunja's editor reads, with every
+ * character of the text escaped. Vikunja is not a forge: the pull request of the work is opened from the project's
+ * forge menu. A Vikunja API token is `tk_` and its secret; the base refuses that shape in whatever is about to be posted.
  */
 
-import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import crypto from 'crypto';
 import type { PluginApi } from '@webship.co/workspace-plugin-api';
 import type { Person, TrackerItem, TrackerItemFull, TrackerProvider, TrackerScope, WriteResult } from '@webship.co/workspace-tracker';
 
-/** A task: its number, with or without Vikunja's "#". */
-export const ITEM_RE = /^#?([1-9][0-9]{0,9})$/;
-/** A project's name, as a scope. */
-const NAME_RE = /^[^\u0000-\u001f\u007f]{1,120}$/;
-/** What a Vikunja API key looks like (an API user's key, not a person's bearer token). */
-export const KEY_RE = /lt_[A-Za-z0-9]{1,64}_[A-Za-z0-9]{16,128}/;
-/** How long the project, its team, statuses and sprints are kept before they are asked again. */
+/** A task: its project's key and its number ("WEB-1"), or its number alone ("#1", "1"). */
+export const ITEM_RE = /^(?:([A-Za-z][A-Za-z0-9]{0,9})-|#)?([1-9][0-9]{0,9})$/;
+/** A project's title, as a scope. */
+const NAME_RE = /^[^\u0000-\u001f\u007f]{1,250}$/;
+/** What a Vikunja API token looks like. */
+export const TOKEN_RE = /tk_[A-Za-z0-9]{32,64}/;
+/** How long the person, a project, its sharing and its board are kept before they are asked again. */
 const KEEP_MS = 5 * 60 * 1000;
-/** The tasks a list reads at most. */
-const MAX_TASKS = 500;
+/** The tasks a list reads at most, in pages of Vikunja's own size. */
+const PAGE = 50;
+const MAX_PAGES = 10;
 
 const configured = (v: unknown) => { const s = String(v == null ? '' : v).trim(); return s && s !== 'CHANGE_ME' ? s : ''; };
 
-/** A role of Vikunja's (its numbers), as the base reads an author's standing. */
-export function roleAssociation(role: unknown): Person['association'] {
-  const r = Number(role);
-  if (r >= 30) return 'owner'; // Company Manager, Administrator, Owner
-  if (r === 20) return 'member'; // Editor
-  return 'outside'; // Commenter (10), Read Only (5), or none
+/** What a share of Vikunja's gives (0 read only, 1 read & write, 2 admin), as the base reads an author's standing. */
+export function permissionAssociation(permission: unknown): Person['association'] {
+  const p = Number(permission);
+  if (p >= 2) return 'owner';
+  if (p === 1) return 'member';
+  return 'outside';
 }
 
-/** How a status reads, by its type: DONE is done, INPROGRESS is work going on, NEW is open. */
-export function stateClassOf(type: unknown): TrackerItem['stateClass'] {
-  const t = String(type || '').toUpperCase();
-  if (t === 'DONE') return 'done';
-  if (t === 'INPROGRESS') return 'doing';
-  return t ? 'open' : undefined;
-}
-
-/** A person's name, as Vikunja shows it: the first name and the last, else the address. */
+/** A person as Vikunja shows them: their name, else their username. */
 export function nameOf(u: any): string {
-  if (!u || typeof u !== 'object') return 'unknown';
-  return String([u.firstname, u.lastname].filter(Boolean).join(' ') || u.username || 'unknown');
+  return String((u && (u.name || u.username)) || '').trim();
 }
 
-/** A task of the API, as the base reads an item. */
-export function itemOf(t: any, base: string, statuses: Map<string, { name: string; type: string }>, people: Map<string, string>, sprints: Map<string, string>): TrackerItem {
-  const status = statuses.get(String(t.status));
-  const assignee = String(t.editorId || '');
-  const sprint = sprints.get(String(t.sprint || ''));
+/** A task's key: its project's key and its number, or "#" and its number when the project has no key. */
+export function keyOf(t: any): string {
+  return String(t.identifier || '') || `#${t.index}`;
+}
+
+/** A task of the API as the base reads it; its state is its bucket on the board, when the board is known. */
+export function itemOf(t: any, base: string, board: Map<string, { bucket: string; first: boolean; done: boolean }>): TrackerItem {
+  const place = board.get(String(t.id));
+  const state = place ? place.bucket : (t.done ? 'Done' : 'To-Do');
+  const stateClass: TrackerItem['stateClass'] = t.done || (place && place.done) ? 'done' : (!place || place.first ? 'open' : 'doing');
   return {
-    id: String(t.id),
-    title: String(t.headline || ''),
-    url: `${base}/tickets/showAll#/tickets/showTicket/${t.id}`,
-    state: status ? status.name : String(t.status ?? ''),
-    stateClass: status ? stateClassOf(status.type) : undefined,
-    type: t.type ? String(t.type) : undefined,
-    assignees: assignee && assignee !== '0' ? [people.get(assignee) || [t.editorFirstname, t.editorLastname].filter(Boolean).join(' ') || `#${assignee}`] : [],
-    labels: String(t.tags || '').split(',').map((s) => s.trim()).filter(Boolean),
-    ...(sprint ? { iteration: `sprint ${sprint}` } : {}),
-    updated: t.modified ? String(t.modified).replace(' ', 'T') : undefined,
+    id: keyOf(t),
+    title: String(t.title || ''),
+    url: `${base}/tasks/${t.id}`,
+    state,
+    stateClass,
+    assignees: (Array.isArray(t.assignees) ? t.assignees : []).map(nameOf).filter(Boolean),
+    labels: (Array.isArray(t.labels) ? t.labels : []).map((l: any) => String(l.title || '')).filter(Boolean),
+    ...(place ? { column: place.bucket } : {}),
+    updated: String(t.updated || ''),
   };
-}
-
-/** The sprint a "current sprint" view means: of the ones whose dates hold `now`, the one that ends first. */
-export function currentSprint(list: any[], now: Date = new Date()): { id: string; name: string } | null {
-  const day = now.toISOString().slice(0, 19).replace('T', ' ');
-  const running = (Array.isArray(list) ? list : []).filter((s) => s && s.id && String(s.startDate || '') <= day && day <= String(s.endDate || ''));
-  running.sort((a, b) => String(a.endDate || '').localeCompare(String(b.endDate || '')));
-  return running.length ? { id: String(running[0].id), name: String(running[0].name || '') } : null;
 }
 
 const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'" };
@@ -106,7 +94,7 @@ function decode(s: string): string {
 const tagsOut = (s: string) => s.replace(/<[^>]*>/g, '');
 
 /**
- * Vikunja's HTML (its editor's), as the text a snapshot keeps: blocks on their own lines, list items as "- ", a task
+ * Leantime's HTML (its editor's), as the text a snapshot keeps: blocks on their own lines, list items as "- ", a task
  * as "- [ ]" or "- [x]", a quote as "> ", code as Markdown code, a link with its address. An HTML comment stays as it is written: what a page does not show is still read, as data.
  */
 export function textOf(html: string): string {
@@ -188,7 +176,7 @@ function inline(text: string): string {
 }
 
 /**
- * Markdown, as the HTML Vikunja's editor reads: paragraphs, headings, lists and task lists, quotes, code blocks, code,
+ * Markdown, as the HTML Leantime's editor reads: paragraphs, headings, lists and task lists, quotes, code blocks, code,
  * links, bold and emphasis. Every character of the text is escaped, so nothing in it becomes markup; an HTML comment
  * (a placeholder in a template) is left out, as a Markdown page does not show it.
  */
@@ -243,35 +231,33 @@ export function htmlOf(markdown: string): string {
   return out.join('') || '<p></p>';
 }
 
-/** What an answer of Vikunja says went wrong, in one line: its error's message, and its data when it adds to it. */
-export function saidOf(data: any): string {
-  const e = data && typeof data === 'object' ? data.error : null;
-  if (!e || typeof e !== 'object') return '';
-  const message = typeof e.message === 'string' ? e.message : '';
-  const more = typeof e.data === 'string' ? e.data : '';
-  return [message, more && more !== message ? more : ''].filter(Boolean).join(': ').slice(0, 300);
-}
 
-interface Member { name: string; email: string; first: string; role: number; active: boolean }
+/** What an answer of Vikunja says went wrong, in one line. */
+export function saidOf(data: any): string {
+  return data && typeof data === 'object' && typeof data.message === 'string' ? data.message.slice(0, 300) : '';
+}
 
 export function vikunjaTracker(api: PluginApi): TrackerProvider {
   const lib = api.lib;
   const settings = () => api.settings.read() || {};
   const base = () => configured(settings().url).replace(/\/+$/, '');
   const token = () => configured(settings().token);
-
   // Who is asking: the site and its token, so that what is kept follows a change of either.
   const asker = () => crypto.createHash('sha1').update(`${base()}\n${token()}`).digest('hex').slice(0, 12);
 
-  /** One call of the JSON-RPC API: the token and the body in files only this user reads, removed after. */
-  async function rpc(method: string, params: Record<string, unknown>): Promise<any> {
+  /** One call of the API: the token and the body in files only this user reads, removed after. */
+  async function call(method: string, route: string, body?: unknown): Promise<any> {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-vikunja-'));
     try {
       const h = path.join(dir, 'headers');
       fs.writeFileSync(h, `Authorization: Bearer ${token()}\nAccept: application/json\nContent-Type: application/json\n`, { mode: 0o600 });
-      const b = path.join(dir, 'body.json');
-      fs.writeFileSync(b, JSON.stringify({ jsonrpc: '2.0', method: `vikunja.rpc.${method}`, params, id: 1 }), { mode: 0o600 });
-      const args = ['-sS', '-m', '30', '-X', 'POST', '-w', '\n%{http_code}', '-H', `@${h}`, '--data-binary', `@${b}`, `${base()}/api/jsonrpc`];
+      const args = ['-sS', '-m', '30', '-X', method, '-w', '\n%{http_code}', '-H', `@${h}`];
+      if (body !== undefined) {
+        const b = path.join(dir, 'body.json');
+        fs.writeFileSync(b, JSON.stringify(body), { mode: 0o600 });
+        args.push('--data-binary', `@${b}`);
+      }
+      args.push(`${base()}/api/v1${route}`);
       const r = await lib.run('curl', args, process.env.HOME || '/', { timeoutMs: 40 * 1000, env: process.env });
       const out = String(r.stdout || '');
       const at = out.lastIndexOf('\n');
@@ -279,20 +265,18 @@ export function vikunjaTracker(api: PluginApi): TrackerProvider {
       if (!status) throw new Error(lib.cliError(String(r.stderr || 'curl did not answer')));
       let data: any = null;
       try { data = JSON.parse(at >= 0 ? out.slice(0, at) : out); } catch (_) { data = null; }
-      if (status === 401 || status === 403) throw new Error(`Vikunja refused the token (${status}): connect again with the site's tool (--connect <login>)`);
-      if (status < 200 || status >= 300 || !data) throw new Error(`Vikunja answered ${status}${saidOf(data) ? `: ${saidOf(data)}` : ''}`);
-      if (data.error) throw new Error(`Vikunja refused ${method}: ${saidOf(data) || 'no reason given'}`);
-      return data.result;
+      if (status === 401) throw new Error(`Vikunja refused the token (401): connect again with the site's tool (--connect <login>)`);
+      if (status === 403) throw new Error(`Vikunja refused it (403)${saidOf(data) ? `: ${saidOf(data)}` : ''}: the token's account may not do that, or the token's permissions do not cover it`);
+      if (status < 200 || status >= 300) throw new Error(`Vikunja answered ${status}${saidOf(data) ? `: ${saidOf(data)}` : ''}`);
+      return data;
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   }
-  async function write(method: string, params: Record<string, unknown>, url: string): Promise<WriteResult & { result?: any }> {
-    try {
-      const result = await rpc(method, params);
-      return result === false ? { ok: false, error: `Vikunja did not take it (${method} answered false)` } : { ok: true, error: '', url, result };
-    } catch (e) { return { ok: false, error: String((e as Error).message || e) }; }
+  async function write(method: string, route: string, body: unknown, url: string): Promise<WriteResult & { result?: any }> {
+    try { return { ok: true, error: '', url, result: await call(method, route, body) }; } catch (e) { return { ok: false, error: String((e as Error).message || e) }; }
   }
+  const failed = (e: unknown): WriteResult => ({ ok: false, error: String((e as Error).message || e) });
 
-  // What is kept for five minutes: the token's own account, a project, its team, statuses and sprints.
+  // What is kept for five minutes: the token's own account, a project, its sharing and its board's buckets.
   const kept = new Map<string, { at: number; value: unknown }>();
   async function keep<T>(what: string, make: () => Promise<T>): Promise<T> {
     const key = `${asker()}:${what}`;
@@ -302,87 +286,114 @@ export function vikunjaTracker(api: PluginApi): TrackerProvider {
     kept.set(key, { at: Date.now(), value });
     return value;
   }
+  // The address of a task the provider has read: its key to its id on the site.
+  const seen = new Map<string, string>();
+  const remember = (t: any) => { if (t && t.id) seen.set(`${asker()}:${keyOf(t)}`, String(t.id)); };
 
-  const me = () => keep('me', async () => { const u = await rpc('Users.Users.getUser', {}); return { id: String(u && u.id || ''), name: nameOf(u) }; });
-  async function projectOf(scope: TrackerScope): Promise<{ id: string; name: string }> {
+  const me = () => keep('me', async () => { const u = await call('GET', '/user'); return { id: String(u && u.id || ''), username: String(u && u.username || ''), name: nameOf(u) }; });
+  async function projectOf(scope: TrackerScope): Promise<{ id: string; title: string; key: string; owner: any }> {
     return keep(`project:${scope.id}`, async () => {
-      const mine = await rpc('Projects.Projects.getProjectsAssignedToUser', { userId: Number((await me()).id) });
-      const found = (Array.isArray(mine) ? mine : []).find((p: any) => p && String(p.name) === scope.id);
-      if (!found) throw new Error(`no project "${scope.id}" among the projects of the account the token is of`);
-      return { id: String(found.id), name: String(found.name) };
+      const list = await call('GET', '/projects?per_page=250');
+      const found = (Array.isArray(list) ? list : []).find((p: any) => p && Number(p.id) > 0 && String(p.title) === scope.id);
+      if (!found) throw new Error(`no project "${scope.id}" the token's account can see`);
+      return { id: String(found.id), title: String(found.title), key: String(found.identifier || ''), owner: found.owner || null };
     });
   }
-  async function membersOf(scope: TrackerScope): Promise<Map<string, Member>> {
+  /** Everyone the project is shared with, by their id: their name, username and permission (a team's for its members). */
+  async function sharingOf(scope: TrackerScope): Promise<Map<string, { name: string; username: string; permission: number }>> {
     const project = await projectOf(scope);
-    return keep(`members:${scope.id}`, async () => {
-      const rows = await rpc('Projects.Projects.getUsersAssignedToProject', { projectId: Number(project.id) });
-      return new Map((Array.isArray(rows) ? rows : []).filter((u: any) => u && u.id).map((u: any) => [String(u.id), {
-        name: nameOf(u), email: String(u.username || ''), first: String(u.firstname || ''),
-        // The project's own role, else the person's role on the site.
-        role: Number(u.projectRole || u.role || 0), active: String(u.status || 'a').toLowerCase() === 'a',
-      } as Member]));
+    return keep(`sharing:${scope.id}`, async () => {
+      const out = new Map<string, { name: string; username: string; permission: number }>();
+      const put = (u: any, permission: number) => {
+        const id = String(u && u.id || '');
+        if (!id) return;
+        const had = out.get(id);
+        if (!had || had.permission < permission) out.set(id, { name: nameOf(u), username: String(u.username || ''), permission });
+      };
+      if (project.owner) put(project.owner, 2);
+      const users = await call('GET', `/projects/${project.id}/users`);
+      for (const u of Array.isArray(users) ? users : []) put(u, Number(u.permission));
+      const teams = await call('GET', `/projects/${project.id}/teams`);
+      for (const team of Array.isArray(teams) ? teams : []) {
+        const full = await call('GET', `/teams/${team.id}`);
+        for (const m of (full && Array.isArray(full.members) ? full.members : [])) put(m, Number(team.permission));
+      }
+      return out;
     });
   }
-  const statusesOf = (scope: TrackerScope) => keep(`statuses:${scope.id}`, async () => {
-    const project = await projectOf(scope);
-    const labels = await rpc('Tickets.Tickets.getStatusLabels', { projectId: Number(project.id) });
-    // In Vikunja's own order (its sortKey), as its board shows the columns.
-    return new Map(Object.entries(labels && typeof labels === 'object' ? labels : {})
-      .sort(([, a]: [string, any], [, b]: [string, any]) => Number(a && a.sortKey || 0) - Number(b && b.sortKey || 0))
-      .map(([k, v]: [string, any]) => [k, { name: String(v && v.name || k), type: String(v && v.statusType || '') }]));
-  });
-  const sprintsOf = (scope: TrackerScope) => keep(`sprints:${scope.id}`, async () => {
-    const project = await projectOf(scope);
-    const rows = await rpc('Sprints.Sprints.getAllSprints', { projectId: Number(project.id) });
-    return Array.isArray(rows) ? rows : [];
-  });
-  async function personOf(scope: TrackerScope, uid: unknown, fallback = ''): Promise<Person> {
-    const id = String(uid || '');
-    const members = await membersOf(scope);
-    const m = id ? members.get(id) : undefined;
-    if (!id) return { name: fallback || 'unknown', association: 'unknown' };
-    return { name: m ? m.name : (fallback || `#${id}`), association: m && m.active ? roleAssociation(m.role) : 'outside' };
+  async function personOf(scope: TrackerScope, u: any): Promise<Person> {
+    const id = String(u && u.id || '');
+    if (!id) return { name: nameOf(u) || 'unknown', association: 'unknown' };
+    const share = (await sharingOf(scope)).get(id);
+    return { name: nameOf(u) || `#${id}`, association: share ? permissionAssociation(share.permission) : 'outside' };
   }
-
-  /**
-   * Someone of the project by what the person typed: "me", the whole name, the first name or the address. Their id.
-   * Tasks go to an Editor or above: a Commenter or a Read Only person may change no task.
-   */
-  async function memberBy(scope: TrackerScope, who: string, toAssign: boolean): Promise<string> {
-    const w = who.trim().toLowerCase();
-    if (w === 'me') return (await me()).id;
-    const list = [...(await membersOf(scope)).entries()].filter(([, m]) => m.active);
-    const found = list.find(([id]) => id === w.replace(/^#/, ''))
-      || list.find(([, m]) => m.email.toLowerCase() === w)
-      || list.find(([, m]) => m.name.toLowerCase() === w)
-      || list.find(([, m]) => m.first.toLowerCase() === w);
-    if (!found) throw new Error(`${who} is not in the project's team`);
-    if (toAssign && found[1].role < 20) throw new Error(`${who} is a Commenter or Read Only in the project: Vikunja gives tasks to its Editors and above`);
-    return found[0];
+  /** The project's board: its Kanban view and buckets, in their order, and which bucket is done. */
+  async function boardOf(scope: TrackerScope): Promise<{ view: string; buckets: { id: string; name: string }[]; done: string }> {
+    const project = await projectOf(scope);
+    return keep(`board:${scope.id}`, async () => {
+      const views = await call('GET', `/projects/${project.id}/views`);
+      const kanban = (Array.isArray(views) ? views : []).find((v: any) => v && (v.view_kind === 'kanban' || v.view_kind === 3));
+      if (!kanban) return { view: '', buckets: [], done: '' };
+      const buckets = await call('GET', `/projects/${project.id}/views/${kanban.id}/buckets`);
+      return {
+        view: String(kanban.id),
+        buckets: (Array.isArray(buckets) ? buckets : []).map((b: any) => ({ id: String(b.id), name: String(b.title || '') })),
+        done: String(kanban.done_bucket_id || ''),
+      };
+    });
   }
-
-  /** The task behind an id of the scope (its project checked), as the API gives it. */
+  /** Where each task is on the board now: one call, not kept. */
+  async function placesOf(scope: TrackerScope): Promise<Map<string, { bucket: string; first: boolean; done: boolean }>> {
+    const project = await projectOf(scope);
+    const board = await boardOf(scope);
+    const out = new Map<string, { bucket: string; first: boolean; done: boolean }>();
+    if (!board.view) return out;
+    const columns = await call('GET', `/projects/${project.id}/views/${board.view}/tasks`);
+    (Array.isArray(columns) ? columns : []).forEach((b: any) => {
+      const first = board.buckets.length > 0 && String(b.id) === board.buckets[0].id;
+      for (const t of (Array.isArray(b.tasks) ? b.tasks : [])) out.set(String(t.id), { bucket: String(b.title || ''), first, done: String(b.id) === board.done });
+    });
+    return out;
+  }
+  /** The task behind an id of the scope, as the API gives it. */
   async function taskIn(scope: TrackerScope, id: string): Promise<any> {
     const m = ITEM_RE.exec(String(id || '').trim());
     if (!m) throw new Error(`not a task: ${id}`);
     const project = await projectOf(scope);
-    const t = await rpc('Tickets.Tickets.getTicket', { id: Number(m[1]) });
-    if (!t || typeof t !== 'object' || String(t.projectId) !== project.id || t.type === 'milestone') throw new Error(`#${m[1]} is not a task of ${scope.id}`);
+    if (m[1] && project.key && m[1].toUpperCase() !== project.key.toUpperCase()) throw new Error(`${id} is not a task of ${scope.id} (${project.key})`);
+    const t = await call('GET', `/projects/${project.id}/tasks/by-index/${m[2]}`);
+    if (!t || typeof t !== 'object' || String(t.project_id) !== project.id) throw new Error(`${id} is not a task of ${scope.id}`);
+    remember(t);
     return t;
   }
-  const taskUrl = (id: string) => `${base()}/tickets/showAll#/tickets/showTicket/${String(id).replace(/^#/, '')}`;
-  const failed = (e: unknown): WriteResult => ({ ok: false, error: String((e as Error).message || e) });
-  async function listOf(scope: TrackerScope, criteria: Record<string, unknown>, keepIt: (t: any) => boolean, limit: number): Promise<TrackerItem[]> {
+  const taskUrl = (scope: TrackerScope, id: string) => {
+    const tid = seen.get(`${asker()}:${String(id).trim()}`);
+    return tid ? `${base()}/tasks/${tid}` : scope.web;
+  };
+  async function listOf(scope: TrackerScope, filter: string, text: string, limit: number): Promise<TrackerItem[]> {
     const project = await projectOf(scope);
-    const [statuses, members, sprints] = [await statusesOf(scope), await membersOf(scope), await sprintsOf(scope)];
-    const people = new Map([...members.entries()].map(([id, m]) => [id, m.name] as [string, string]));
-    const sprintNames = new Map(sprints.map((s: any) => [String(s.id), String(s.name || '')] as [string, string]));
-    const rows = await rpc('Tickets.Tickets.getAll', { searchCriteria: { currentProject: Number(project.id), excludeType: 'milestone', ...criteria }, limit: MAX_TASKS });
-    const open = (t: any) => stateClassOf((statuses.get(String(t.status)) || { type: '' }).type) !== 'done';
-    return (Array.isArray(rows) ? rows : []).filter((t: any) => t && t.id && t.type !== 'milestone' && open(t) && keepIt(t))
-      .sort((a: any, b: any) => String(b.modified || '').localeCompare(String(a.modified || '')))
-      .slice(0, limit)
-      .map((t: any) => itemOf(t, base(), statuses, people, sprintNames));
+    const places = await placesOf(scope);
+    const rows: any[] = [];
+    for (let page = 1; page <= MAX_PAGES && rows.length < limit; page++) {
+      const q = new URLSearchParams({ filter: `project = ${project.id} && done = false${filter ? ` && ${filter}` : ''}`, per_page: String(PAGE), page: String(page), sort_by: 'updated', order_by: 'desc' });
+      if (text) q.set('s', text);
+      const got = await call('GET', `/tasks?${q.toString()}`);
+      const list = Array.isArray(got) ? got : [];
+      rows.push(...list);
+      if (list.length < PAGE) break;
+    }
+    rows.forEach(remember);
+    return rows.slice(0, limit).map((t) => itemOf(t, base(), places));
+  }
+  /** Someone of the project by what the person typed: "me", the name, the username. Their id and username. */
+  async function sharedBy(scope: TrackerScope, who: string, toAssign: boolean): Promise<{ id: string; username: string }> {
+    const w = who.trim().toLowerCase();
+    if (w === 'me') { const m = await me(); return { id: m.id, username: m.username }; }
+    const list = [...(await sharingOf(scope)).entries()];
+    const found = list.find(([, s]) => s.username.toLowerCase() === w) || list.find(([, s]) => s.name.toLowerCase() === w);
+    if (!found) throw new Error(`${who} is not someone the project is shared with`);
+    if (toAssign && found[1].permission < 1) throw new Error(`${who} may only read the project: Vikunja's tasks go to those who may change them`);
+    return { id: found[0], username: found[1].username };
   }
 
   return {
@@ -391,124 +402,112 @@ export function vikunjaTracker(api: PluginApi): TrackerProvider {
     label: 'VIKUNJA',
     noun: { one: 'task', many: 'tasks' },
     capabilities: {
-      views: ['open', 'mine', 'assigned', 'iteration', 'query'],
-      iterationWord: 'sprint',
-      comment: true, worklog: true, transition: true, labels: true, assign: true, create: true,
+      views: ['open', 'mine', 'assigned', 'query'],
+      comment: true, worklog: false, transition: true, labels: true, assign: true, create: true,
       request: 'none',
     },
     idPattern: ITEM_RE,
-    tokenVariables: ['VIKUNJA_TOKEN', 'VIKUNJA_API_KEY'],
+    tokenVariables: ['VIKUNJA_TOKEN', 'VIKUNJA_API_TOKEN'],
     secret: () => token(),
-    tokenShapes: [['a Vikunja API key', KEY_RE]],
+    tokenShapes: [['a Vikunja API token', TOKEN_RE]],
     ready: () => (!base() ? `no Vikunja address in ${api.settings.file} (url)` : !token() ? `no token in ${api.settings.file} (token)` : ''),
     // A workspace project has no Vikunja project of its own: it remembers one, or the default is used.
     scopeOf: () => null,
     parseScope: (text) => {
       const t = String(text || '').trim();
-      return NAME_RE.test(t) && base() ? { id: t, name: t, web: `${base()}/projects/showMy` } : null;
+      return NAME_RE.test(t) && base() ? { id: t, name: t, web: `${base()}/projects` } : null;
     },
-    urlOf: (_scope, id) => taskUrl(id),
+    urlOf: (scope, id) => taskUrl(scope, id),
     account: async () => { try { return (await me()).name; } catch (_) { return ''; } },
-    // The projects the token's account is a member of.
+    // The projects the token's account can see (not its saved filters).
     scopes: async () => {
-      const mine = await rpc('Projects.Projects.getProjectsAssignedToUser', { userId: Number((await me()).id) });
-      return (Array.isArray(mine) ? mine : []).filter((p: any) => p && p.name && NAME_RE.test(String(p.name)))
-        .map((p: any) => ({ id: String(p.name), name: String(p.name), web: `${base()}/projects/changeCurrentProject/${p.id}` }));
+      const list = await call('GET', '/projects?per_page=250');
+      return (Array.isArray(list) ? list : []).filter((p: any) => p && Number(p.id) > 0 && p.title && NAME_RE.test(String(p.title)))
+        .map((p: any) => ({ id: String(p.title), name: String(p.title), web: `${base()}/projects/${p.id}` }));
     },
 
     list: async (scope, q) => {
       const limit = Math.max(1, Math.min(q.limit, 100));
-      if (q.view === 'mine') return listOf(scope, { users: (await me()).id }, () => true, limit);
+      if (q.view === 'mine') return listOf(scope, `assignees in ${(await me()).username}`, '', limit);
       if (q.view === 'assigned') {
         if (!q.who) return [];
-        const uid = await memberBy(scope, q.who, false);
-        return listOf(scope, { users: uid }, (t) => String(t.editorId || '') === uid, limit);
+        const person = await sharedBy(scope, q.who, false);
+        return listOf(scope, `assignees in ${person.username}`, '', limit);
       }
-      if (q.view === 'iteration') {
-        const sprint = currentSprint(await sprintsOf(scope));
-        if (!sprint) return [];
-        return listOf(scope, { sprint: sprint.id }, (t) => String(t.sprint || '') === sprint.id, limit);
-      }
-      if (q.view === 'query') {
-        const words = String(q.text || '').trim().toLowerCase();
-        return listOf(scope, {}, (t) => String(t.headline || '').toLowerCase().includes(words), limit);
-      }
-      return listOf(scope, {}, () => true, limit);
+      if (q.view === 'query') return listOf(scope, '', String(q.text || '').trim(), limit);
+      return listOf(scope, '', '', limit);
     },
 
     get: async (scope, id) => {
       const t = await taskIn(scope, id);
-      const [statuses, members, sprints] = [await statusesOf(scope), await membersOf(scope), await sprintsOf(scope)];
-      const people = new Map([...members.entries()].map(([uid, m]) => [uid, m.name] as [string, string]));
-      const sprintNames = new Map(sprints.map((s: any) => [String(s.id), String(s.name || '')] as [string, string]));
-      const author = await personOf(scope, t.userId, [t.userFirstname, t.userLastname].filter(Boolean).join(' '));
-      // The last editor: the person of the newest change of the title or the description, when not the creator.
-      const history = await rpc('Tickets.TicketHistory.getTicketHistory', { ticketId: Number(t.id) });
-      const edit = (Array.isArray(history) ? history : []).find((h: any) => h && (h.field === 'headline' || h.isDescriptionChange === true || h.field === 'description'));
-      const lastEditor = edit && String(edit.userId) !== String(t.userId) ? await personOf(scope, edit.userId, String(edit.userName || '')) : undefined;
+      const places = await placesOf(scope);
+      const author = await personOf(scope, t.created_by);
       const comments = [];
-      const rows = await rpc('Comments.Comments.getComments', { module: 'ticket', entityId: Number(t.id) });
-      for (const c of (Array.isArray(rows) ? rows : []).slice().sort((a: any, b: any) => String(a.date || '').localeCompare(String(b.date || '')))) {
-        const body = textOf(String(c.text || ''));
-        if (body) comments.push({ author: await personOf(scope, c.userId, [c.firstname, c.lastname].filter(Boolean).join(' ')), body, at: String(c.date || '').replace(' ', 'T') });
+      const rows = await call('GET', `/tasks/${t.id}/comments`);
+      for (const c of (Array.isArray(rows) ? rows : []).slice().sort((a: any, b: any) => String(a.created || '').localeCompare(String(b.created || '')))) {
+        const body = textOf(String(c.comment || ''));
+        if (body) comments.push({ author: await personOf(scope, c.author), body, at: String(c.created || '') });
       }
-      const full: TrackerItemFull = { ...itemOf(t, base(), statuses, people, sprintNames), body: textOf(String(t.description || '')), author, ...(lastEditor ? { lastEditor } : {}), comments };
+      const full: TrackerItemFull = { ...itemOf(t, base(), places), body: textOf(String(t.description || '')), author, comments };
       return full;
     },
 
     comment: async (scope, id, markdown) => {
       try {
         const t = await taskIn(scope, id);
-        return await write('Comments.Comments.addComment', { values: { text: htmlOf(markdown), father: 0 }, module: 'ticket', entityId: Number(t.id) }, taskUrl(String(t.id)));
-      } catch (e) { return failed(e); }
-    },
-    worklog: async (scope, id, entry) => {
-      try {
-        const t = await taskIn(scope, id);
-        const minutes = Math.round(Number(entry.minutes));
-        if (!(minutes > 0 && minutes <= 24 * 60)) return { ok: false, error: 'the time is a number of minutes, more than none and at most a day' };
-        return await write('Timesheets.Timesheets.logTime', {
-          ticketId: Number(t.id),
-          params: { hours: Math.round((minutes / 60) * 100) / 100, timestamp: Math.floor(Date.now() / 1000), kind: 'GENERAL_BILLABLE', description: String(entry.text || '').slice(0, 2000) },
-        }, `${taskUrl(String(t.id))}`);
+        return await write('PUT', `/tasks/${t.id}/comments`, { comment: htmlOf(markdown) }, `${base()}/tasks/${t.id}`);
       } catch (e) { return failed(e); }
     },
     transitions: async (scope, id) => {
       const t = await taskIn(scope, id);
-      return [...(await statusesOf(scope)).entries()].filter(([k]) => k !== String(t.status)).map(([k, s]) => ({ id: k, name: s.name }));
+      const places = await placesOf(scope);
+      const now = places.get(String(t.id));
+      return (await boardOf(scope)).buckets.filter((b) => !now || b.name !== now.bucket).map((b) => ({ id: b.id, name: b.name }));
     },
     transition: async (scope, id, to) => {
       try {
         const t = await taskIn(scope, id);
-        if (!(await statusesOf(scope)).has(String(to))) return { ok: false, error: `not a status of ${scope.id}: ${to}` };
-        return await write('Tickets.Tickets.patchTicket', { id: Number(t.id), values: { status: Number(to) } }, taskUrl(String(t.id)));
+        const project = await projectOf(scope);
+        const board = await boardOf(scope);
+        if (!board.buckets.some((b) => b.id === String(to))) return { ok: false, error: `not a bucket of the board of ${scope.id}: ${to}` };
+        return await write('POST', `/projects/${project.id}/views/${board.view}/buckets/${to}/tasks`, { task_id: Number(t.id) }, `${base()}/tasks/${t.id}`);
       } catch (e) { return failed(e); }
     },
     labels: async (scope, id, add, remove) => {
       try {
         const t = await taskIn(scope, id);
-        const now = String(t.tags || '').split(',').map((s) => s.trim()).filter(Boolean);
-        const gone = new Set(remove.map((r) => r.trim().toLowerCase()));
-        const tags = [...now.filter((x) => !gone.has(x.toLowerCase())), ...add.map((a) => a.trim()).filter((a) => a && !now.some((x) => x.toLowerCase() === a.toLowerCase()))];
-        if (tags.some((x) => x.includes(','))) return { ok: false, error: 'a tag holds no comma in Vikunja' };
-        return await write('Tickets.Tickets.patchTicket', { id: Number(t.id), values: { tags: tags.join(',') } }, taskUrl(String(t.id)));
+        const usable = await call('GET', '/labels?per_page=250');
+        const byTitle = new Map<string, string>((Array.isArray(usable) ? usable : []).map((l: any) => [String(l.title || '').toLowerCase(), String(l.id)] as [string, string]));
+        const now = new Map<string, string>((Array.isArray(t.labels) ? t.labels : []).map((l: any) => [String(l.title || '').toLowerCase(), String(l.id)] as [string, string]));
+        const missing = add.filter((a) => a.trim() && !byTitle.has(a.trim().toLowerCase()));
+        if (missing.length) return { ok: false, error: `no label ${missing.join(', ')} the account can use: Vikunja's labels are its people's own; make it in Vikunja first` };
+        for (const a of add) {
+          const lid = byTitle.get(a.trim().toLowerCase()) as string;
+          if (!now.has(a.trim().toLowerCase())) await call('PUT', `/tasks/${t.id}/labels`, { label_id: Number(lid) });
+        }
+        for (const r of remove) {
+          const lid = now.get(r.trim().toLowerCase());
+          if (lid) await call('DELETE', `/tasks/${t.id}/labels/${lid}`);
+        }
+        return { ok: true, error: '', url: `${base()}/tasks/${t.id}` };
       } catch (e) { return failed(e); }
     },
     assign: async (scope, id, who) => {
       try {
         const t = await taskIn(scope, id);
-        const uid = await memberBy(scope, who, true);
-        return await write('Tickets.Tickets.patchTicket', { id: Number(t.id), values: { editorId: Number(uid) } }, taskUrl(String(t.id)));
+        const person = await sharedBy(scope, who, true);
+        return await write('PUT', `/tasks/${t.id}/assignees`, { user_id: Number(person.id) }, `${base()}/tasks/${t.id}`);
       } catch (e) { return failed(e); }
     },
     create: async (scope, item) => {
       try {
         const project = await projectOf(scope);
-        const r = await write('Tickets.Tickets.addTicket', { values: { headline: item.title, description: htmlOf(item.body), projectId: Number(project.id), type: 'task', status: 3 } }, '');
+        const r = await write('PUT', `/projects/${project.id}/tasks`, { title: item.title, description: htmlOf(item.body) }, '');
         if (!r.ok) return r;
-        const made = Array.isArray(r.result) ? r.result[0] : r.result;
-        const tid = Number(made) > 0 ? String(made) : '';
-        return tid ? { ok: true, error: '', url: taskUrl(tid), id: tid } : { ok: false, error: 'Vikunja made no task (addTicket answered no number)' };
+        const made = r.result;
+        if (!made || !made.id) return { ok: false, error: 'Vikunja made no task (it answered no id)' };
+        remember(made);
+        return { ok: true, error: '', url: `${base()}/tasks/${made.id}`, id: keyOf(made) };
       } catch (e) { return failed(e); }
     },
   };
