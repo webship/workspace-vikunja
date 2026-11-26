@@ -289,9 +289,9 @@ test('no step phrase of the skill names the platform, and its features are whole
 test('no settings comment, label or item carries the words of another platform, or "a issue"', () => {
   for (const f of [manifest.settingsTemplate, manifest.labels, ...ITEM_FILES.filter((x) => x.endsWith('.md'))]) {
     const src = read(f);
-    assert.doesNotMatch(src, /work package|\bcycles?\b|\bGuest\b|\bReporter\b|\bDeveloper\b|\bversion "Sprint|worklogs? \(time|time entr|\bAdmin of\b/i, `${f} speaks of Vikunja's tasks, sprints and roles`);
-    assert.doesNotMatch(src, /\bReader\b(?! Test)/, `${f}: Vikunja's role is Read Only`);
+    assert.doesNotMatch(src, /work package|\bcycles?\b|\bsprints?\b|worklogs? \(time|bearer token|\bAdmin of\b/i, `${f} speaks of Vikunja's tasks, board and sharing`);
+    assert.doesNotMatch(src, /\b(Guest|Commenter|Editors?|Reporter|Developer)\b/, `${f}: Vikunja's sharing is read only, read & write or admin`);
     assert.doesNotMatch(src, /\ba issue|\ba task\b.*\ban task/i, `${f}: an issue, a task`);
-    assert.doesNotMatch(src, /Gitea|Forgejo|Redmine|OpenProject|\bPlane\b/, `${f} names another platform`);
+    assert.doesNotMatch(src, /Gitea|Forgejo|Redmine|OpenProject|\bPlane\b|Leantime/, `${f} names another platform`);
   }
 });

@@ -1,20 +1,20 @@
-# Leantime — core/config/plugin.leantime.settings.yml
+# Vikunja — core/config/plugin.vikunja.settings.yml
 #
-# The Leantime the dashboard reads tasks from: a site the builder made (https://<name>.ddev.site), or your own. The
-# token is a bearer token of an account there, so the dashboard acts as that person: `cmd-tools-leantime-cli.sh <site>
-# --connect <login>` makes one with Leantime's own console. Never printed.
-# The Leantime address, without a trailing slash.
+# The Vikunja the dashboard reads tasks from: a site the builder made (https://<name>.ddev.site), or your own. The
+# token is an API token of an account there, so the dashboard acts as that person: `cmd-tools-vikunja-cli.sh <site>
+# --connect <login>` makes one through Vikunja's API. Never printed.
+# The Vikunja address, without a trailing slash.
 url: CHANGE_ME
-# A bearer token of the account the dashboard reads (and, with writes on, writes) as.
+# An API token of the account the dashboard reads (and, with writes on, writes) as (tk_…).
 token: CHANGE_ME
 # The tasks as work items (the tracker family). See @webship.co/workspace-tracker for every key.
-# Writes to Leantime: comments, statuses, assignees, logged time, new tasks. Off by default.
+# Writes to Vikunja: comments, moves on the board, labels, assignees, new tasks. Off by default.
 allow_writes: false
 # Author sessions at once.
 max_agents: 1
-# The Leantime project a workspace project works against when it remembers none: its name (Webship site).
+# The Vikunja project a workspace project works against when it remembers none: its title (Webship site).
 default_scope: ""
-# The Leantime projects (their names) the list may be switched to; empty is any project the account is a member of.
+# The Vikunja projects (their titles) the list may be switched to; empty is any project the account can see.
 scopes: []
 # branch: a new branch in the project; worktree: a git worktree outside the workspace folders.
 work_in: branch
@@ -24,7 +24,7 @@ sandbox: required
 network_domains: []
 # WebFetch and WebSearch in the author session.
 allow_web: false
-# The comments a snapshot keeps: members (the project's Editors and above), all, none.
+# The comments a snapshot keeps: members (its owner, admin and read & write shares), all, none.
 comments_from: members
-# A task from outside the project (made, or last edited, by a Commenter, a Read Only person or someone with no membership): analyze (work it only after a confirmation that names its author) or refuse.
+# A task from outside the project (made by someone it is shared with read only, or not shared with): analyze (work it only after a confirmation that names its author) or refuse.
 outsider_items: analyze

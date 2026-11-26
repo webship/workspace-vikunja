@@ -1,66 +1,61 @@
 ---
-name: leantime-scenarios
-description: Write webship-js scenarios for a Leantime site (the open-source project management software) of the Webship Workspace from phrases that exist — the Leantime step pack's steps by area (logging in and out and a refused login, a project and who may open it, the task list, one task with its status, comments, assignee, logged time and maker, a new task, a sprint, what a Commenter, a Read Only person or an account outside the team may not do, test content), the traps found on real sites, and whole features. Use when asked to write, extend or fix scenarios for a Leantime site, or when a scenario of the site fails on a phrase.
+name: vikunja-scenarios
+description: Write webship-js scenarios for a Vikunja site (the open-source to-do and project management app) of the Webship Workspace from phrases that exist — the Vikunja step pack's steps by area (logging in and out and a refused login, a project and who may open it, the task list, one task with its done state, comments, labels, assignee, priority and maker, a new task, the board and its buckets, what read-only sharing or none may not do, test content), the traps found on real sites, and whole features. Use when asked to write, extend or fix scenarios for a Vikunja site, or when a scenario of the site fails on a phrase.
 ---
 
-# leantime-scenarios
+# vikunja-scenarios
 
-Scenarios for a site built with the Leantime plugin (`bash cmd-leantime-project.sh <site> --install --add-users
+Scenarios for a site built with the Vikunja plugin (`bash cmd-vikunja-project.sh <site> --install --add-users
 --sample-content`) in a container-based workspace (DDEV by default), tested with webship-js and
-`@webship-js/leantime-steps` once `bash cmd-tools-testing.sh <site>` set the project up. Every phrase below exists in
+`@webship-js/vikunja-steps` once `bash cmd-tools-testing.sh <site>` set the project up. Every phrase below exists in
 the pack or in webship-js; a scenario names no platform.
 
 ## Accounts
 
-- `Given I am a logged in user with the "member" user`: `owner` (Company Manager in the team of Webship site),
-  `member` (Editor), `commenter` (Commenter), `reader` (Read Only), `stranger` (an Editor outside the team).
-  `Given I am not logged in` for a visitor.
-- The accounts are made by the build (`cmd-tools-leantime-cli.sh <site> --add-users`); a suite never creates or
-  deletes one, and never writes a password: it logs in by the handle. Each logs in with its address
-  (`member@example.com`) and shows as its whole name (`Member Test`).
+- `Given I am a logged in user with the "member" user`: `owner` (the owner of Webship site), `member` (read &
+  write), `reader` (read only), `stranger` (not shared). `Given I am not logged in` for a visitor.
+- The accounts are made by the build (`cmd-tools-vikunja-cli.sh <site> --add-users`); a suite never creates or
+  deletes one, and never writes a password: it logs in by the handle. Each logs in with its username (`member`) and
+  shows as its name (`Member Test`).
 
 ## Phrases by area
 
 | Area | Steps |
 | --- | --- |
-| Session | `I am a logged in user with the "member" user`, `I log in with the "member" user`, `I log in as "member@example.com" with the password "…"`, `the login should be refused with "Username or password incorrect"`, `I am not logged in`, `I log out`, `I should be logged in as "Member Test"` (or the address), `I should not be logged in` |
-| Projects | `I open the project "Webship site"` (its tasks), `I should be refused the project "Webship site"` |
+| Session | `I am a logged in user with the "member" user`, `I log in with the "member" user`, `I log in as "member" with the password "…"`, `the login should be refused with "Wrong username or password"`, `I am not logged in`, `I log out`, `I should be logged in as "Member Test"` (or the username), `I should not be logged in` |
+| Projects | `I open the project "Webship site"` (its list), `I should be refused the project "Webship site"` |
 | Test content | `there is a task "Webship test …" in the project "Webship site"` (it goes after the scenario), `there is no task "Webship test …" in the project "Webship site"` |
-| The list | `the task list should show "…"` (`should not show`), `I create a task "Webship test …" in the project "Webship site"` (on the board, it goes after the scenario) |
-| One task | `I open the task "…"` (its title, or its number "#1"), `I set the status of the task to "In Progress"`, `the status of the task should be "In Progress"`, `I add the comment "…" to the task`, `the task should show the comment "…"` (`… by "Member Test"`), `I assign the task to "Owner Test"`, `the task should be assigned to "Owner Test"`, `I log "1.5" hours on the task with the note "…"`, `the task should have "1.5" hours logged`, `the task should be created by "Owner"` |
+| The list | `the task list should show "…"` (`should not show`), `I create a task "Webship test …" in the project "Webship site"` (through "Add a task…", it goes after the scenario) |
+| One task | `I open the task "…"` (its title, or its key "WEB-1"), `I mark the task done`, `I mark the task undone`, `the task should be done` (`should not be done`), `I add the comment "…" to the task`, `the task should show the comment "…"` (`… by "Member Test"`), `I add the label "bug" to the task`, `the task should have the label "bug"`, `I assign the task to "Owner Test"`, `the task should be assigned to "Owner Test"`, `the task should be created by "Owner Test"` |
 | What an account may not do | `I should not be able to change the task`, `I should not be able to comment on the task`, `I should not be able to create a task in the project "Webship site"`, `I should be refused the task "…"`, `I should be refused the project "Webship site"` |
-| Sprints | `I open the sprint "Sprint 1" of the project "Webship site"`, `the sprint should list the task "…"` (`should not list`) |
+| The board | `I open the board of the project "Webship site"`, `the bucket "Doing" should list the task "…"` (`should not list`) |
 
 ## The sample content
 
-`--sample-content` adds, in Webship site: "The greeting script says Helo instead of Hello" (#1, by the owner, In
-Progress, high, assigned to the member, tagged bug, in the sprint "Sprint 1", with the owner's comment "Seen on the
-test site: the greeting prints Helo." and 1.5 hours the member logged) and "The usage line spells greeting as
-greting" (#2, by the member, New, with the commenter's comment, a word from outside the project's editors). A suite
-reads them and never changes them.
+`--sample-content` shares Webship site (`WEB`), owned by owner, with member (read & write) and reader (read only),
+and adds "The greeting script says Helo instead of Hello" (WEB-1, by owner, high, labelled bug, assigned to member, in
+the bucket Doing, with owner's comment "Seen on the test site: the greeting prints Helo.") and "The usage line spells
+greeting as greting" (WEB-2, by member, in To-Do). A suite reads them and never changes them.
 
 ## Traps found on real sites
 
-- A task opens in a window over the board: the steps find it by the task's own address, never by its place.
-- A screen shows a person its window of help once a session ("I'll explore on my own"); the steps close it by its
-  own button and the run says so. The site keeps one window at a time: the steps close the board's before they open a
-  task, and ask for the task again when one came over it.
+- The session is kept in the page's storage (a token), not in a cookie: the steps put it back as a whole.
+- A task has a page of its own (`/tasks/<id>`), and shows its project's key and number ("WEB-1").
 - A comment stays: change only a task the scenario made (`there is a task "Webship test …"`), which goes after it.
-- The assignee list offers everyone of the project's team by their whole name, a Commenter and a Read Only person
-  too: name the one the scenario means ("Owner Test").
-- A Commenter's task window has its Save buttons and lists closed, and comments; a Read Only person's has no comment
-  box either.
-- A refusal (a wrong password, a project or a task an account may not see) makes the browser log refused requests:
-  tag those scenarios `@js-off`.
-- Leantime allows a set number of logins and API calls a minute (20 and 120 by default); a site the workspace built
-  allows 100 and 1000, and a step that is refused for that says so.
-- Leantime's own delete of a task keeps its comments, logged time and history in its database, out of every screen:
-  `bash cmd-tools-leantime-cli.sh <site> --tidy` removes them, and the "Webship test …" tasks a stopped run left.
+- Marking a task done moves it to the board's Done bucket, and back out when it is undone.
+- Labels belong to the people who make them: a label is added by its title, and the account must be able to use it.
+- An assignee is someone the project is shared with read & write, or its owner: read-only sharing gives no tasks.
+- A refusal (a wrong password, a project or a task an account may not see) and a logout make the browser log refused
+  requests: tag those scenarios `@js-off`.
+- Vikunja allows a set number of requests a minute before a login (10 by default); a site the workspace built allows
+  100, and a step that is refused for that says so.
+- A run that was stopped half way leaves its "Webship test …" tasks: `bash cmd-tools-vikunja-cli.sh <site> --tidy`
+  removes them.
 
 ## Whole features
 
 `examples/` holds three features that pass on a site built with `--install --add-users --sample-content`: the session
-(`session.feature`), a task worked by an Editor (`issue.feature`) and the roles (`roles.feature`).
+(`session.feature`), a task worked by a member (`issue.feature`) and the roles (`roles.feature`).
 
 ## The book
 
