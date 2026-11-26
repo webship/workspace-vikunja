@@ -129,8 +129,9 @@ revokes the earlier one of the same title, and writes the token, with the site's
 never shown. The dashboard then acts as that person.
 
 `--tidy` deletes for good, with no way back. It removes the tasks a stopped test run left: titled "Webship test …",
-made by one of the default accounts in Webship site, with what Vikunja keeps of them in tables of their own (comments,
-assignees, labels, places on the board and in the lists, reminders, relations, subscriptions, reactions). A task with
+made by one of the default accounts in Webship site, live or in Vikunja's trash (where a deleted task stays 30 days),
+with what Vikunja keeps of them in tables of their own (comments, assignees, labels, places on the board and in the
+lists, reminders, relations, subscriptions, reactions). A task with
 another title ("Webship testing plan") or another author stays, and so does everything of other people.
 
 ## The tasks as work items

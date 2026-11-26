@@ -26,9 +26,9 @@ the pack or in webship-js; a scenario names no platform.
 | Projects | `I open the project "Webship site"` (its list), `I should be refused the project "Webship site"` |
 | Test content | `there is a task "Webship test …" in the project "Webship site"` (it goes after the scenario), `there is no task "Webship test …" in the project "Webship site"` |
 | The list | `the task list should show "…"` (`should not show`), `I create a task "Webship test …" in the project "Webship site"` (through "Add a task…", it goes after the scenario) |
-| One task | `I open the task "…"` (its title, or its key "WEB-1"), `I mark the task done`, `I mark the task undone`, `the task should be done` (`should not be done`), `I add the comment "…" to the task`, `the task should show the comment "…"` (`… by "Member Test"`), `I add the label "bug" to the task`, `the task should have the label "bug"`, `I assign the task to "Owner Test"`, `the task should be assigned to "Owner Test"`, `the task should be created by "Owner Test"` |
+| One task | `I open the task "…"` (its title, or its key "WEB-1"), `I mark the task done`, `I mark the task undone`, `the task should be done` (`should not be done`), `I add the comment "…" to the task`, `the task should show the comment "…"` (`… by "Member Test"`), `I add the label "bug" to the task`, `the task should have the label "bug"`, `I assign the task to "Owner Test"`, `the task should be assigned to "Owner Test"`, `the task should be created by "Owner Test"`, `I move the task to the trash`, `the task should be in the trash` (`should not be in the trash`), `I restore the task from the trash` |
 | What an account may not do | `I should not be able to change the task`, `I should not be able to comment on the task`, `I should not be able to create a task in the project "Webship site"`, `I should be refused the task "…"`, `I should be refused the project "Webship site"` |
-| The board | `I open the board of the project "Webship site"`, `the bucket "Doing" should list the task "…"` (`should not list`) |
+| The board | `I open the board of the project "Webship site"`, `the bucket "Doing" should list the task "…"` (`should not list`), `I move the task "…" to the bucket "Doing"` (from its own page, opened from its card) |
 
 ## The sample content
 
@@ -39,9 +39,14 @@ greeting as greting" (WEB-2, by member, in To-Do). A suite reads them and never 
 
 ## Traps found on real sites
 
-- The session is kept in the page's storage (a token), not in a cookie: the steps put it back as a whole.
+- The session is kept in the page's storage (a token), with a cookie that renews it: the steps put both back. A login
+  through the API sets that cookie too, so the pack's API calls never share the browser's cookies.
 - A task has a page of its own (`/tasks/<id>`), and shows its project's key and number ("WEB-1").
 - A comment stays: change only a task the scenario made (`there is a task "Webship test …"`), which goes after it.
+- A deleted task goes to Vikunja's trash for 30 days, with everything attached to it; the pack takes a scenario's task
+  out of the trash too. The trash page lists the trashed tasks of the projects an account may change: read-only
+  sharing sees none there.
+- A task's page offers the board's buckets under its title only when it was opened from its card on the board.
 - Marking a task done moves it to the board's Done bucket, and back out when it is undone.
 - Labels belong to the people who make them: a label is added by its title, and the account must be able to use it.
 - An assignee is someone the project is shared with read & write, or its owner: read-only sharing gives no tasks.
@@ -50,7 +55,7 @@ greeting as greting" (WEB-2, by member, in To-Do). A suite reads them and never 
 - Vikunja allows a set number of requests a minute before a login (10 by default); a site the workspace built allows
   100, and a step that is refused for that says so.
 - A run that was stopped half way leaves its "Webship test …" tasks: `bash cmd-tools-vikunja-cli.sh <site> --tidy`
-  removes them.
+  removes them, live or in the trash.
 
 ## Whole features
 
