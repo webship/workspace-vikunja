@@ -1,6 +1,6 @@
 {
   "name": "@webship.co/workspace-vikunja",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Vikunja for Webship Workspace: the builder (`cmd-vikunja-project.sh`, a site of the open-source to-do and project management app, from Vikunja's own image on the project's own MariaDB, in containers: DDEV, with the default accounts sharing a sample project in their permissions and its tasks, a label, an assignee, a comment and its board) and its tool in every sites folder, the Vikunja step pack wired into the testing setup, the tasks of a Vikunja as work items of the tracker family (list, read, analyze, and do the work with the workspace's AI CLI on a branch; comments, moves on the board, labels and assignees after a person's click, writes off by default), and its AI items in their folders.",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
