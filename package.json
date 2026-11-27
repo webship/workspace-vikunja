@@ -63,6 +63,7 @@
       "machine": [
         "scripts/docker-compose.vikunja.yaml",
         "scripts/vikunja-site.php",
+        "scripts/vikunja-serve.sh",
         "testing/site.feature"
       ]
     },
@@ -84,8 +85,10 @@
       ]
     },
     "features": [
-      "features/vikunja.feature"
-    ]
+      "features/vikunja.feature",
+      "features/vikunja-runtimes.feature"
+    ],
+    "featuresSite": "cmd-vikunja-project.sh ci-vikunja --install --add-users --sample-content --runtime docker"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

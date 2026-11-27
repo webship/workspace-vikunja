@@ -8,12 +8,17 @@
 # the core's own functions. Everything runs in containers, never on the host:
 #   - DDEV (the default): Vikunja's image is a service of a generic project, on the project's own MariaDB (the db
 #     service), at https://<name>.ddev.site, run as the host user; the project's web container keeps the mail catcher.
-# Docker Compose, Podman, Kubernetes, Lando and Docksal are not proven yet: asked for one, the builder says so and
-# changes nothing.
-# Vikunja's image has no shell: its own commands run with `docker exec` of its binary, and the site's accounts and
-# content go through its API from the project's web container (vikunja-site.php, with PHP there). Passwords and
-# tokens travel on an input, never on a command line: the first account's password reaches Vikunja's own command
-# through a pseudo-terminal, from a file only its owner reads, removed after.
+#     Its image has no shell: its own commands run with `docker exec` of its binary.
+#   - Docker Compose, Podman and Kubernetes (--runtime docker|podman|kubernetes), through the core's runtime layer:
+#     Vikunja's own binary, of the same release, runs in the project's web container (a generic stack on Debian's PHP
+#     image), started as the host user once the project's MariaDB takes connections (rt_serve), and serves the
+#     project's address itself. Vikunja stops at once when its database does not answer at its start, and a service
+#     of a project's own there has no wait for the database (webship/workspace#946): the stack's server has one. Its
+#     binary is statically linked, so it runs as it is in that image. Its own commands run there with `ddev exec`.
+# Lando and Docksal are not proven yet: asked for one, the builder says so and changes nothing.
+# The site's accounts and content go through Vikunja's API from the project's web container (vikunja-site.php, with
+# PHP there). Passwords and tokens travel on an input, never on a command line: the first account's password reaches
+# Vikunja's own command through a pseudo-terminal, from a file only its owner reads, removed after.
 #
 # The container tool has no project type for Vikunja, so a site of this plugin is recognised by a file on DDEV
 # (.ddev/config.vikunja.yaml, written by the builder).
@@ -42,6 +47,11 @@ readonly VIKUNJA_MEMORY_MB=1024;
 # The database of a site: Vikunja supports MySQL, MariaDB, PostgreSQL and SQLite, and the Workspace uses MariaDB, so a
 # site's database is the same on every runtime.
 readonly VIKUNJA_DATABASE='mariadb:11.4';
+
+# On another runtime than DDEV: the port Vikunja listens on in the web container (its own, as on DDEV), and the image
+# of that container, Debian's PHP (the site script's language), pinned to its release line.
+readonly VIKUNJA_SERVE_PORT=3456;
+readonly VIKUNJA_WEB_IMAGE='docker.io/library/php:8.3-cli-bookworm';
 
 # How many requests a minute Vikunja allows from one address before a login (its log-in, sign-up and confirmation
 # forms) on a site the builder makes (--login-limit, or site_vikunja_login_limit of the folder's settings): a dev and
@@ -74,12 +84,21 @@ function vikunja_runtime() {
   if declare -f runtime_of > /dev/null ; then runtime_of "$@" ; else echo 'ddev' ; fi
 }
 
-# The address of the site in this folder (or of a new build named PROJECT_NAME, on DDEV).
+# The address of the site in this folder (or of a new build named PROJECT_NAME, on DDEV); on another runtime the one
+# the runtime gives it.
 function vikunja_url() {
+  if [ "$(vikunja_runtime)" != 'ddev' ] && declare -f rt_url > /dev/null ; then rt_url ; return ; fi
   echo "https://${1:-${PROJECT_NAME}}.ddev.site" ;
 }
 
-# Is this folder a Vikunja site of this plugin? On DDEV the builder leaves .ddev/config.vikunja.yaml in it.
+# Where Vikunja answers inside the project, from the web container: its service on DDEV, the container itself
+# elsewhere.
+function vikunja_inside_url() {
+  if [ "$(vikunja_runtime)" = 'ddev' ] ; then echo 'http://vikunja:3456' ; else echo "http://127.0.0.1:${VIKUNJA_SERVE_PORT}" ; fi
+}
+
+# Is this folder a Vikunja site of this plugin? On DDEV the builder leaves .ddev/config.vikunja.yaml in it; on another
+# runtime the project carries the plugin's claim.
 function vikunja_is_project() {
   local project_path="$1" ;
   [ -f "${project_path}/.ddev/config.vikunja.yaml" ] && return 0 ;
@@ -102,14 +121,19 @@ function vikunja_enter_project() {
   cd "${project_path}" || return 1 ;
 }
 
-# The site's copy of the plugin's script (vikunja/), brought up to the installed plugin's, so a plugin updated with
-# --install reaches the sites built before it. The site's own values (vikunja/env) and files are left as they are.
+# The site's copies of the plugin's files (vikunja/), brought up to the installed plugin's, so a plugin updated with
+# --install reaches the sites built before it: the site script, and on another runtime than DDEV the server script.
+# The site's own values (vikunja/env) and files are left as they are.
 function vikunja_refresh_files() {
-  local project_path="$1" from="${WORKSPACE_SCRIPTS}/plugins/vikunja" ;
+  local project_path="$1" from="${WORKSPACE_SCRIPTS}/plugins/vikunja" f ;
   [ -d "${project_path}/${VIKUNJA_FILES}" ] || return 0 ;
-  if [ -f "${from}/vikunja-site.php" ] && ! cmp -s "${from}/vikunja-site.php" "${project_path}/${VIKUNJA_FILES}/vikunja-site.php" ; then
-    cp "${from}/vikunja-site.php" "${project_path}/${VIKUNJA_FILES}/vikunja-site.php" || return 1 ;
-  fi
+  for f in vikunja-site.php vikunja-serve.sh ; do
+    # The server script only where the site has it: a site on DDEV has none.
+    [ "${f}" = 'vikunja-site.php' ] || [ -f "${project_path}/${VIKUNJA_FILES}/${f}" ] || continue ;
+    if [ -f "${from}/${f}" ] && ! cmp -s "${from}/${f}" "${project_path}/${VIKUNJA_FILES}/${f}" ; then
+      cp "${from}/${f}" "${project_path}/${VIKUNJA_FILES}/${f}" || return 1 ;
+    fi
+  done
 }
 
 # A value of the site's own values (vikunja/env), never printed by the tools: VIKUNJA_RELEASE.
@@ -127,12 +151,14 @@ function vikunja_free_memory() {
   awk '/^MemAvailable:/ { print int($2 / 1024) }' /proc/meminfo 2>/dev/null ;
 }
 
-# Write the project's files: Vikunja's service (.ddev/docker-compose.vikunja.yaml), its image in .ddev/.env, the claim
-# (.ddev/config.vikunja.yaml), the plugin's script, and the folder of Vikunja's files, the host user's.
+# Write the project's files: the plugin's script and the folder of Vikunja's files, the host user's; on DDEV
+# Vikunja's service (.ddev/docker-compose.vikunja.yaml), its image in .ddev/.env and the claim
+# (.ddev/config.vikunja.yaml); on another runtime the claim, the web container's stack with Vikunja's binary, and its
+# server.
 function vikunja_write_config() {
-  local project_path="$1" release="$2" ;
+  local project_path="$1" release="$2" runtime="${3:-ddev}" ;
   local from="${WORKSPACE_SCRIPTS}/plugins/vikunja" f ;
-  for f in docker-compose.vikunja.yaml vikunja-site.php ; do
+  for f in docker-compose.vikunja.yaml vikunja-site.php vikunja-serve.sh ; do
     if [ ! -f "${from}/${f}" ] ; then
       echo "${f} is not in ${from}: install the plugin (plugins.sh --install vikunja)." ;
       return 1 ;
@@ -140,6 +166,26 @@ function vikunja_write_config() {
   done
   mkdir -p "${project_path}/${VIKUNJA_FILES}/files" || return 1 ;
   cp "${from}/vikunja-site.php" "${project_path}/${VIKUNJA_FILES}/" || return 1 ;
+
+  if [ "${runtime}" != 'ddev' ] ; then
+    # Another runtime: Vikunja's own binary in the web container, which the stack starts once the database takes
+    # connections. Vikunja's image is from scratch: its binary is statically linked, and taken from the image of the
+    # release the site runs.
+    cp "${from}/vikunja-serve.sh" "${project_path}/${VIKUNJA_FILES}/" || return 1 ;
+    ( cd "${project_path}" \
+      && rt_claim vikunja \
+      && rt_stack image "${VIKUNJA_WEB_IMAGE}" \
+      && rt_web_build vikunja <<DOCKEREOF
+# PDO's MySQL driver, which the site script (vikunja/vikunja-site.php) reads the project's database with, as on DDEV.
+RUN docker-php-ext-install pdo_mysql
+# Vikunja's own binary, of the release the site runs: statically linked, it runs as it is in this image.
+COPY --from=docker.io/vikunja/vikunja:${release} /app/vikunja/vikunja /usr/local/bin/vikunja
+DOCKEREOF
+    ) || return 1 ;
+    ( cd "${project_path}" && rt_serve "${VIKUNJA_SERVE_PORT}" "bash ${VIKUNJA_FILES}/vikunja-serve.sh" ) || return 1 ;
+    return 0 ;
+  fi
+
   cp "${from}/docker-compose.vikunja.yaml" "${project_path}/.ddev/docker-compose.vikunja.yaml" || return 1 ;
   printf 'VIKUNJA_IMAGE=%s\n' "docker.io/vikunja/vikunja:${release}" > "${project_path}/.ddev/.env" || return 1 ;
   cat > "${project_path}/.ddev/config.vikunja.yaml" <<YAMLEOF
@@ -154,7 +200,14 @@ YAMLEOF
 # The site's own values (vikunja/env, which only you can read): the address, the project's database, the mail
 # catcher, sign-ups closed, and its secret, of this site only.
 function vikunja_write_env() {
-  local project_path="$1" release="$2" base_url="$3" login_limit="${4:-${VIKUNJA_LOGIN_LIMIT}}" ;
+  local project_path="$1" release="$2" base_url="$3" login_limit="${4:-${VIKUNJA_LOGIN_LIMIT}}" runtime="${5:-ddev}" ;
+  # The mail catcher: DDEV's web container on DDEV, the stack's own Mailpit elsewhere. Off DDEV, Vikunja runs from the
+  # project's folder: its files there, its own paths under it.
+  local mail='web' paths='' ;
+  if [ "${runtime}" != 'ddev' ] ; then
+    mail='mail' ;
+    paths="VIKUNJA_SERVICE_ROOTPATH=/var/www/html/${VIKUNJA_FILES}"$'\n'"VIKUNJA_FILES_BASEPATH=/var/www/html/${VIKUNJA_FILES}/files" ;
+  fi
   ( umask 077 && cat > "${project_path}/${VIKUNJA_FILES}/env" <<ENVEOF
 # The values of this Vikunja site, made by the Vikunja builder of the workspace: its secret is of this site only.
 # Read by Vikunja's container; never printed.
@@ -169,7 +222,7 @@ VIKUNJA_DATABASE_USER=db
 VIKUNJA_DATABASE_PASSWORD=db
 VIKUNJA_DATABASE_DATABASE=db
 VIKUNJA_MAILER_ENABLED=true
-VIKUNJA_MAILER_HOST=web
+VIKUNJA_MAILER_HOST=${mail}
 VIKUNJA_MAILER_PORT=1025
 VIKUNJA_MAILER_AUTHTYPE=plain
 VIKUNJA_MAILER_USERNAME=
@@ -180,19 +233,29 @@ VIKUNJA_MAILER_FROMEMAIL=vikunja@example.com
 # The requests a minute before a login, from one address (--login-limit): a dev and test setting, as a test suite logs
 # in more often than a person; Vikunja's own is 10.
 VIKUNJA_RATELIMIT_NOAUTHLIMIT=${login_limit}
+${paths}
 ENVEOF
   ) ;
 }
 
-# The name of Vikunja's container of the project in this folder.
+# The name of Vikunja's container of the project in this folder, on DDEV.
 function vikunja_container() {
   echo "ddev-$(sed -n 's/^name:[[:space:]]*"\{0,1\}\([A-Za-z0-9._-]*\)"\{0,1\}[[:space:]]*$/\1/p' .ddev/config.yaml | head -n 1)-vikunja" ;
 }
 
-# One of Vikunja's own commands (`vikunja <command>…`), in its container: its image has no shell, so its binary runs
-# by itself, with the container's own values.
+# One of Vikunja's own commands (`vikunja <command>…`): on DDEV in its container, where its image has no shell, so its
+# binary runs by itself with the container's own values; elsewhere in the web container, with the site's values.
 function vikunja_cli() {
-  docker exec "$(vikunja_container)" /app/vikunja/vikunja "$@" ;
+  if [ "$(vikunja_runtime)" = 'ddev' ] ; then
+    docker exec "$(vikunja_container)" /app/vikunja/vikunja "$@" ;
+  else
+    ddev exec "$(vikunja_cli_line "$@")" ;
+  fi
+}
+
+# Off DDEV: the line that runs Vikunja's binary in the web container, with the site's values, from Vikunja's folder.
+function vikunja_cli_line() {
+  printf 'set -a ; . /var/www/html/%s/env ; set +a ; cd /var/www/html/%s && /usr/local/bin/vikunja %s' "${VIKUNJA_FILES}" "${VIKUNJA_FILES}" "$(printf '%q ' "$@")" ;
 }
 
 # Vikunja's command that asks for a password (user create, user reset-password): the password reaches it through a
@@ -201,10 +264,18 @@ function vikunja_cli_password() {
   local password="$1" ; shift ;
   local file ; file="$(umask 077 && mktemp)" || return 1 ;
   printf '%s\n%s\n' "${password}" "${password}" > "${file}" ;
-  local quoted ; quoted="$(printf '%q ' docker exec -it "$(vikunja_container)" /app/vikunja/vikunja "$@")" ;
-  # What the command says (the terminal does not echo the password) is shown when it fails.
-  local said ; said="$(script -q -e -c "${quoted}" /dev/null < "${file}" 2>&1)" ;
-  local status=$? ;
+  local said status ;
+  if [ "$(vikunja_runtime)" = 'ddev' ] ; then
+    local quoted ; quoted="$(printf '%q ' docker exec -it "$(vikunja_container)" /app/vikunja/vikunja "$@")" ;
+    # What the command says (the terminal does not echo the password) is shown when it fails.
+    said="$(script -q -e -c "${quoted}" /dev/null < "${file}" 2>&1)" ;
+    status=$? ;
+  else
+    # Elsewhere the pseudo-terminal is the web container's own (script is in its image): the password reaches it on
+    # the input of `ddev exec`, from the same file.
+    said="$(ddev exec "script -q -e -c $(printf '%q' "$(vikunja_cli_line "$@")") /dev/null" < "${file}" 2>&1)" ;
+    status=$? ;
+  fi
   rm -f "${file:?}" ;
   [ ${status} -eq 0 ] || printf '%s\n' "${said}" | tr -d '\r' | grep -v 'Password: *$' | tail -n 3 >&2 ;
   return ${status} ;
@@ -213,12 +284,12 @@ function vikunja_cli_password() {
 # Run verbs of vikunja-site.php (version, accounts, content, tidy, list, token, counts) with PHP in the project's web
 # container. A payload (accounts, passwords, a login) travels on the input, never on a command line.
 function vikunja_site() {
-  ddev exec "php /var/www/html/${VIKUNJA_FILES}/vikunja-site.php $*" ;
+  ddev exec "VIKUNJA_API=$(vikunja_inside_url)/api/v1 php /var/www/html/${VIKUNJA_FILES}/vikunja-site.php $*" ;
 }
 
 # The answer of Vikunja's info, asked inside the project's network from the web container: 200 once it serves.
 function vikunja_probe() {
-  ddev exec "curl -s -o /dev/null -m 10 -w '%{http_code}' http://vikunja:3456/api/v1/info" < /dev/null 2>/dev/null | tr -d '\r' | tail -1 ;
+  ddev exec "curl -s -o /dev/null -m 10 -w '%{http_code}' $(vikunja_inside_url)/api/v1/info" < /dev/null 2>/dev/null | tr -d '\r' | tail -1 ;
 }
 
 # Wait until the site answers, in the project's folder: up to five minutes, as the first start makes its tables.
@@ -230,7 +301,7 @@ function vikunja_wait() {
     sleep 3 ;
   done
   echo "Vikunja did not answer (its info: ${code:-none}); the end of its log:" ;
-  ddev logs -s vikunja --tail 40 < /dev/null 2>/dev/null ;
+  if [ "$(vikunja_runtime)" = 'ddev' ] ; then ddev logs -s vikunja --tail 40 < /dev/null 2>/dev/null ; else ddev logs < /dev/null 2>/dev/null | tail -n 40 ; fi
   return 1 ;
 }
 
@@ -283,8 +354,12 @@ function vikunja_build() {
   local project_path="${WORKSPACE_ROOT}/${doc_name}/${PROJECT_NAME}" ;
   local runtime ; runtime="$(cd "${WORKSPACE_ROOT}/${doc_name}" && vikunja_runtime)" ;
 
-  if [ "${runtime}" != 'ddev' ] ; then
-    echo "Vikunja builds on DDEV for now (--runtime ddev), not on ${runtime}: that runtime is not proven for it yet. Nothing was changed." ;
+  case "${runtime}" in
+    ddev|docker|podman|kubernetes) ;;
+    *) echo "Vikunja builds on DDEV, Docker Compose, Podman and Kubernetes for now (--runtime ddev, docker, podman or kubernetes), not on ${runtime}: that runtime is not proven for it yet. Nothing was changed." ; exit 1 ;;
+  esac
+  if [ "${runtime}" != 'ddev' ] && ! declare -f rt_serve > /dev/null ; then
+    echo "--runtime ${runtime} needs a Webship Workspace whose runtimes serve an application of its own (rt_serve, webship/workspace#841): update the workspace, or build on DDEV. Nothing was changed." ;
     exit 1 ;
   fi
   if ! [[ "${release}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ; then
@@ -311,7 +386,8 @@ function vikunja_build() {
     echo "The workspace account's password (core/config/settings.yml) has fewer than eight characters, which Vikunja asks of a password: --install makes it the instance's first account. Nothing was changed." ;
     exit 1 ;
   fi
-  if [ "${INSTALL}" == 'yes' ] && ! command -v script > /dev/null ; then
+  # On DDEV the pseudo-terminal is this machine's; elsewhere the web container's own.
+  if [ "${INSTALL}" == 'yes' ] && [ "${runtime}" = 'ddev' ] && ! command -v script > /dev/null ; then
     echo "--install needs script (util-linux) on this machine: Vikunja's own command takes the first account's password from a terminal only. Nothing was changed." ;
     exit 1 ;
   fi
@@ -330,11 +406,17 @@ function vikunja_build() {
   cd "${project_path}" || exit 1 ;
 
   # A generic project on MariaDB 11.4.
-  ddev config --project-type=generic --project-name=${PROJECT_NAME} --database=${VIKUNJA_DATABASE} \
-    --nodejs-version=$(ddev_nodejs_version) < /dev/null || exit 1 ;
-  vikunja_write_config "${project_path}" "${release}" || exit 1 ;
+  if [ "${runtime}" = 'ddev' ] ; then
+    ddev config --project-type=generic --project-name=${PROJECT_NAME} --database=${VIKUNJA_DATABASE} \
+      --nodejs-version=$(ddev_nodejs_version) < /dev/null || exit 1 ;
+  else
+    # The runtime's own project: Docker Compose, Podman or Kubernetes, through the runtime layer.
+    ddev config --project-type=generic --webserver-type=generic --project-name=${PROJECT_NAME} --database=${VIKUNJA_DATABASE} --auto < /dev/null || exit 1 ;
+  fi
+  vikunja_write_config "${project_path}" "${release}" "${runtime}" || exit 1 ;
+  # The address once the runtime has given the project its port.
   local base_url ; base_url="$(vikunja_url)" ;
-  vikunja_write_env "${project_path}" "${release}" "${base_url}" "${login_limit}" || exit 1 ;
+  vikunja_write_env "${project_path}" "${release}" "${base_url}" "${login_limit}" "${runtime}" || exit 1 ;
 
   echo "Starting the project and Vikunja ${release}: its image is a download of about 55 MB the first time, and the first start makes its tables." ;
   ddev_up start -y < /dev/null || exit 1 ;

@@ -4,8 +4,8 @@ Vikunja, the open-source to-do and project management app, for the [Webship Work
 a container-based workspace (DDEV by default). The plugin brings:
 
 - **a builder**, `cmd-vikunja-project.sh`: a real Vikunja site from Vikunja's own image on the project's own MariaDB,
-  on DDEV, every account made by Vikunja's own command, a sample project shared with the default accounts in their
-  permissions, and its tasks, a label, an assignee, a comment and its board;
+  on DDEV, Docker Compose, Podman or Kubernetes, every account made by Vikunja's own command, a sample project shared
+  with the default accounts in their permissions, and its tasks, a label, an assignee, a comment and its board;
 - **a tool**, `cmd-tools-vikunja-cli.sh`: what a site is and its accounts, Vikunja's own commands in its container,
   the default accounts, the sample content, a clean-up after a stopped test run, and the dashboard's connection;
 - **the step pack** [`@webship-js/vikunja-steps`](https://github.com/webship/vikunja-steps) wired into the workspace's
@@ -30,10 +30,10 @@ bash core/scripts/plugins.sh --configure vikunja
 
 - A sites folder: one of the `dev`, `test`, `sandboxes` or `demos` plugins. The commands are placed there.
 - The AI folders `ai-agents`, `ai-skills`, `ai-commands` and `ai-prompts`, where its AI items land.
-- DDEV, the container runtime Vikunja is proven on so far. Docker Compose, Podman and Kubernetes are not proven for it
-  yet: asked for one, the builder says so and changes nothing.
-- `script` (util-linux) on the machine, which every Linux distribution has: Vikunja's own command takes a password from
-  a terminal only (see below).
+- A container runtime: DDEV (the default), Docker Compose, Podman or Kubernetes (`--runtime`). Lando and Docksal are
+  not proven for it yet: asked for one, the builder says so and changes nothing.
+- On DDEV, `script` (util-linux) on the machine, which every Linux distribution has: Vikunja's own command takes a
+  password from a terminal only (see below). On the other runtimes the web container's own `script` does it.
 - A download of about 55 MB for Vikunja's image the first time, and memory: the builder asks for 1 GB free before it
   starts (`free -m`).
 
@@ -51,7 +51,7 @@ bash cmd-vikunja-project.sh mysite --install --add-users --sample-content
 | `--sample-content` | With `--install --add-users`: the project Webship site shared with them, two tasks, a label, an assignee, a comment and its board |
 | `--release <X.Y.Z>` | The release of Vikunja's image: 2.8.0 by default |
 | `--login-limit <number>` | The requests a minute before a login (the log-in, sign-up and confirmation forms) Vikunja allows from one address on the site, a dev and test setting: 100 by default, where Vikunja's own is 10 |
-| `--runtime ddev` | DDEV, the runtime proven for Vikunja so far (the default, or `container.runtime` of `settings.yml`) |
+| `--runtime <runtime>` | `ddev` (the default, or `container.runtime` of `settings.yml`), `docker` (Docker Compose), `podman` or `kubernetes` |
 | `--launch` | Open the site when it is ready |
 
 A project of the same name is deleted first, with its database and its files. Vikunja's own image (`vikunja/vikunja`:
@@ -88,6 +88,32 @@ address, 10 by default, even with its rate limit off. A test suite logs in far m
 workspace builds allows 100: `--login-limit` (or `site_vikunja_login_limit` in the folder's settings) sets another,
 and `--login-limit 10` builds a site with Vikunja's own default. Only the sites the builder makes get it: a Vikunja you
 point the dashboard at, with `--connect` or by hand, keeps its own limit, and the plugin never changes it.
+
+### On Docker Compose, Podman and Kubernetes
+
+```bash
+bash cmd-vikunja-project.sh mysite --install --add-users --sample-content --runtime docker   # or podman, kubernetes
+```
+
+The builder works through the Workspace's runtime layer there, and the site is the same: Vikunja 2.8.0 on the
+project's own MariaDB 11.4, the same accounts and the same sample content, at the address the runtime gives it
+(`http://127.0.0.1:<port>`, or the node's address and a NodePort on Kubernetes). The stack's Mailpit catches its mail.
+
+**The shape differs from DDEV's, for one reason: Vikunja stops at once when its database does not answer at its start.**
+On DDEV its image waits for the database (`depends_on`, the database healthy). As a service of a project's own on the
+other runtimes, nothing would make it wait, and Docker Compose and Podman would not start it again
+(webship/workspace#946): on a project's first start MariaDB takes seconds to make its database. So there:
+
+- **Vikunja's own binary runs in the web container,** of the release the site runs: it comes from Vikunja's image
+  (`COPY --from=docker.io/vikunja/vikunja:2.8.0`), and is statically linked, so it runs as it is in the stack's image,
+  Debian's PHP (`php:8.3-cli-bookworm`), with PDO's MySQL driver added for the site script.
+- **The stack starts it once the database takes connections** (`rt_serve`, `vikunja/vikunja-serve.sh`), as the host
+  user, with the site's values, and Vikunja serves the project's address itself: its API and its screens.
+- **Its files** are in the project's own `vikunja/files`, the host user's, as on DDEV.
+- **Its own commands** (`vikunja user create`, `reset-password`, `change-status`) run in the web container
+  (`ddev exec`). The password reaches `vikunja user create` through the container's own pseudo-terminal (`script`),
+  on the input from the file only its owner reads, as on DDEV.
+- **The site script** runs there too, with PHP, against Vikunja at `http://127.0.0.1:3456`.
 
 ### The default accounts
 

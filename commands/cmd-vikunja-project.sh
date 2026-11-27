@@ -5,9 +5,10 @@
 # Installed by the Vikunja plugin (plugins.sh --install vikunja); __WORKSPACE__ is the workspace it was installed into.
 #
 # Build a Vikunja site in containers from Vikunja's own image, on the project's own MariaDB: on DDEV at
-# https://<name>.ddev.site. With --install Vikunja's own command makes the workspace account the instance's first
-# account and its admin; with --add-users the default accounts; with --sample-content the project Webship site shared
-# with them, its tasks, a label, an assignee, a comment and its board.
+# https://<name>.ddev.site, or with --runtime docker, podman or kubernetes at the address the runtime gives it. With
+# --install Vikunja's own command makes the workspace account the instance's first account and its admin; with
+# --add-users the default accounts; with --sample-content the project Webship site shared with them, its tasks, a
+# label, an assignee, a comment and its board.
 
 # Bootstrap.
 # Find the workspace tooling from this script, so a fresh clone needs no setup.

@@ -19,7 +19,8 @@
  * What a verb reads (accounts, passwords, a login) comes on the input as JSON, never on a command line.
  */
 
-const API = 'http://vikunja:3456/api/v1';
+// Vikunja's API inside the project: its service on DDEV, the web container itself on the other runtimes (VIKUNJA_API).
+define('API', getenv('VIKUNJA_API') ?: 'http://vikunja:3456/api/v1');
 const SAMPLE_PROJECT = 'Webship site';
 const SAMPLE_KEY = 'WEB';
 const TEST_PREFIX = 'Webship test ';
