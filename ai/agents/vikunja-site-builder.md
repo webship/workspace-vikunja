@@ -34,8 +34,13 @@ bash cmd-vikunja-project.sh myold --install --release 2.8.0
 The site is Vikunja's own image (`vikunja/vikunja`: its API and its web app in one binary, an image with no shell)
 on the project's own MariaDB 11.4, run as the host user, its files in the project's `vikunja/files`. On DDEV the
 image takes the project's address, `https://mysite.ddev.site`; the project's web container keeps the mail catcher at
-`https://mysite.ddev.site:8026`, where the site's mail goes. Sign-ups are closed. Docker Compose, Podman and
-Kubernetes are not proven for Vikunja yet: the builder says so and stops before it changes anything.
+`https://mysite.ddev.site:8026`, where the site's mail goes. Sign-ups are closed. With `--runtime docker`, `podman`
+or `kubernetes` the builder works through the Workspace's runtime layer: Vikunja stops at once when its database does
+not answer at its start, so there Vikunja's own binary (of the same release, statically linked) runs in the web
+container, which the stack starts as the host user once MariaDB takes connections, and serves the project's address
+itself; its files are in the project's `vikunja/files`, and its own commands run in that container with `ddev exec`.
+The stack's Mailpit catches its mail. Lando and Docksal are not proven for Vikunja yet: the builder says so and stops
+before it changes anything.
 
 The builder asks for 1 GB of free memory (`free -m`) before it starts. The first build downloads about 55 MB for
 Vikunja's image. Build one site at a time, and stop a site you are not using.
@@ -47,7 +52,7 @@ Vikunja's image. Build one site at a time, and stop a site you are not using.
 | `--sample-content` | With `--install --add-users`: the project Webship site shared with them, two tasks, a label, an assignee, a comment and its board |
 | `--release <X.Y.Z>` | The release of the image: 2.8.0 by default |
 | `--login-limit <number>` | The requests a minute before a login Vikunja allows from one address: a dev and test setting, 100 by default (Vikunja's own is 10) |
-| `--runtime ddev` | The container runtime: DDEV, the one proven for Vikunja so far |
+| `--runtime <runtime>` | The container runtime: `ddev` (the default), `docker` (Docker Compose), `podman` or `kubernetes` |
 | `--launch` | Open the site when it is ready |
 
 A project of the same name is deleted first, with its database and its files. The site's own values (its secret) are

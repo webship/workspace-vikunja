@@ -45,7 +45,7 @@ export function assistantContext(): string {
   return [
     'Vikunja (a plugin, @webship.co/workspace-vikunja), the open-source to-do and project management app: a site is built with',
     '`bash cmd-vikunja-project.sh <name> --install --add-users --sample-content` from a sites folder (dev, test, sandboxes, demos):',
-    'Vikunja\'s own image (2.8.0 by default, `--release`) on the project\'s own MariaDB 11.4, on DDEV at https://<name>.ddev.site; other runtimes are not proven for it yet.',
+    'Vikunja\'s own image (2.8.0 by default, `--release`) on the project\'s own MariaDB 11.4, on DDEV at https://<name>.ddev.site, or with `--runtime docker`, `podman` or `kubernetes` through the runtime layer: there Vikunja\'s own binary runs in the web container, started once MariaDB takes connections (Vikunja stops at once when its database does not answer), at the address the runtime gives it; Lando and Docksal are not proven for it yet.',
     'The builder asks for 1 GB of free memory before it starts.',
     '`--install` makes the workspace account the instance\'s first account with Vikunja\'s own command (its password through a pseudo-terminal, never on a command line); sign-ups stay closed.',
     '`--add-users` adds the default accounts the same way (owner, member, reader, stranger), each @example.com;',
